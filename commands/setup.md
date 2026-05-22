@@ -42,7 +42,19 @@ ls ~/.config/search-crew/ 2>&1 || echo "未初始化"
    - 否则一旦本地丢失，你长期沉淀的偏好就找不回来了
 ```
 
-### 4. Stop hook 注册引导（可选但推荐）
+### 4. 激活仓库内 git hook（每个 clone 一次）
+
+仓库内 `.githooks/pre-commit` 在 commit 前自动检查「OpenSpec change 已完成实施但未归档」的状态。脚本随仓库走，但每个新 clone 都要跑一次激活命令：
+
+```bash
+git config core.hooksPath .githooks
+```
+
+`git config --local --get core.hooksPath` 输出 `.githooks` 即生效。
+
+不激活也能正常 commit，只是失去归档检查。
+
+### 5. Stop hook 注册引导（可选但推荐）
 
 向用户展示如何把 `stop_hook.py` 接到 Claude Code，让 pending 学习区在每次主 agent 工作结束时自动提示：
 
@@ -65,7 +77,7 @@ ls ~/.config/search-crew/ 2>&1 || echo "未初始化"
 不注册也行——只是 pending 学习区不会自动提示，你可以手动 cat ~/.config/search-crew/pending/ 看。
 ```
 
-### 5. 提示用户重新加载
+### 6. 提示用户重新加载
 
 如果用户刚改了 `~/.zshrc`：
 
@@ -75,7 +87,7 @@ ls ~/.config/search-crew/ 2>&1 || echo "未初始化"
   然后重新打开 Claude Code 让 plugin 拿到新环境变量
 ```
 
-### 6. 测试建议
+### 7. 测试建议
 
 ```
 快速测试：

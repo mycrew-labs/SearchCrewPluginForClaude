@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# OpenSpec archive check
+# commit 前检查是否有「实施完成但未归档」的 OpenSpec change。
+# 没有 openspec/changes/ 或没装 openspec CLI 时 noop（安全）。
+
+set -u
+
+[ -d "openspec/changes" ] || exit 0
+command -v openspec >/dev/null 2>&1 || exit 0
+
+names="$(openspec list --json 2>/dev/null \
+  | python3 -c 'import json,sys; [print(c["name"]) for c in json.load(sys.stdin).get("changes",[])]' 2>/dev/null)"
+
+problems=""
+while IFS= read -r name; do
+  [ -n "$name" ] || continue
+  status="$(openspec status --change "$name" --json 2>/dev/null)"
+  if echo "$status" | grep -q '"isComplete":[[:space:]]*true'; then
+    problems="${problems}  - ${name}"$'\n'
+  fi
+done <<< "$names"
+
+if [ -n "$problems" ]; then
+  cat >&2 <<EOF
+❌ 检测到 OpenSpec change 实施已完成但未归档：
+
+$problems
+归档命令：
+  openspec archive <change-name>
+
+合并 delta 到主 spec 后再 commit。
+若临时存档进度不想触发本检查，可用：
+  git commit --no-verify
+（AI 绝不会主动用 --no-verify；该参数仅供你手动应急）
+EOF
+  exit 1
+fi
+
+exit 0
