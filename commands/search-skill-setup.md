@@ -1,5 +1,5 @@
 ---
-name: setup
+name: search-skill-setup
 description: 检查 Search Crew plugin 的配置状态、API key 可用性、Chrome / MCP 可用性，并给出引导。
 ---
 
@@ -103,7 +103,7 @@ git config core.hooksPath .githooks
   对话说：「去 react.dev 查 Suspense 的最新用法」（关键词触发 site-search）
 
 深度调研测试：
-  /deep-search 深入调研开源 LLM 推理框架的现状和趋势
+  /search-deep 深入调研开源 LLM 推理框架的现状和趋势
 
 查看历史使用：
   ! python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/usage.py --last 10

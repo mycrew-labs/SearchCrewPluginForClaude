@@ -25,3 +25,12 @@ deep_search:
 call_cap:
   ai_backend: 1          # grok / doubao / gemini 同 run 上限
   non_ai_backend: 2      # jina / serper / 站点 adapter / chrome-devtools-mcp 等同 run 上限
+  # 注：读取/抓取操作（jina-reader、fetch.py 直连）豁免本上限，上限只管搜索源
+
+# web-page-fetch 抓取被挡（反爬墙 / 登录墙 / 付费墙）时怎么办：
+# - honest（默认）：诚实说明被挡、未取到正文，不打断流程
+# - collaborate：诚实说明 + 主动给用户协作路径（浏览器打开贴正文 / 本地文件路径 / 提供 cookies）
+#   适合你常读需登录/付费内容、愿意配合的场景
+# 未来 B-006 远程 browser-host 就绪后，needs_auth 会先自动走远程，仍拿不到才落到本策略。
+web_page_fetch:
+  on_blocked: honest

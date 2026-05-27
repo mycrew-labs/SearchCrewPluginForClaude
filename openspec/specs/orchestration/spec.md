@@ -6,20 +6,6 @@
 
 让用户用自然语言（或一个 slash command）启动调研，主 agent 自动判断派哪种 subagent、并行派发、综合产物、给出带证据的回复。
 ## Requirements
-### Requirement: 唯一显式 slash command 是 `/deep-search`
-系统 SHALL 仅提供一个用户显式触发的 slash command：`/deep-search <主题>`，用于强制启动 deep-search 流。其余搜索场景 MUST 由对话语义自动判断派发。
-
-**Lock**: user-confirmed
-**Confirmed-At**: 2026-05-21
-
-#### Scenario: 用户输入 /deep-search 跟主题
-- **WHEN** 用户输入 `/deep-search 调研开源 LLM 推理框架`
-- **THEN** 主 agent 派出 deep-search subagent 处理该主题
-
-#### Scenario: 不存在 /search 命令
-- **WHEN** 用户尝试 `/search ...` 或 `/search --site react.dev ...`
-- **THEN** Claude Code 报告该命令不存在；主 agent 不响应这两个语法
-
 ### Requirement: 对话语义触发 fast-search 与 site-search
 无显式 slash command 时，主 agent SHALL 按对话语义自动派发：通用查询语气派 fast-search；定向官方站语气或命中权威性敏感主题（临床 / 专利 / 学术等）派 site-search。
 
@@ -153,4 +139,25 @@
 #### Scenario: 未变成多行
 - **WHEN** 主 agent 输出最终回复
 - **THEN** cost 总览整体仍是一行字符串，不含换行符
+
+### Requirement: 唯一显式搜索 slash command 是 /search-deep
+系统 SHALL 仅提供一个用户显式触发的搜索 slash command：`/search-deep <主题>`（插件命名空间下为 `/search-crew:search-deep`），用于强制启动 deep-search 流。其余搜索场景 MUST 由对话语义自动判断派发。命令的短名 MUST 用 `search-*` 前缀，避免占用 `/deep-search`、`/setup` 这类通用全局名。
+
+**Lock**: user-confirmed
+**Confirmed-At**: 2026-05-26
+
+#### Scenario: 用户输入 /search-deep 跟主题
+- **WHEN** 用户输入 `/search-deep 调研开源 LLM 推理框架`
+- **THEN** 主 agent 派出 deep-search subagent 处理该主题（subagent 名仍为 deep-search，未改）
+
+#### Scenario: 不存在通用 /search 或裸 /deep-search
+- **WHEN** 用户尝试 `/search ...`
+- **THEN** Claude Code 报告该命令不存在；真正的命令是 `/search-deep`（或 `/search-crew:search-deep`）
+
+### Requirement: 主 agent 读 URL 优先用 web-page-fetch skill
+主 agent 在需要读取具体 URL 的页面 / 文件内容时 SHALL 优先经 `web-page-fetch` skill 调 `fetch.py`，而非直接用内置 WebFetch；仅在 `fetch.py` 返回 `WEBFETCH_FALLBACK` 时回落内置 WebFetch，返回 `anti_bot` 时诚实失败。此偏好为软引导（Claude Code 无法物理禁用内置 WebFetch），靠 skill description + 本 requirement 落实。
+
+#### Scenario: 主 agent 读 URL
+- **WHEN** 用户给出一个 URL 要求读取内容
+- **THEN** 主 agent 优先调 `fetch.py`（web-page-fetch skill 指引），按其三态结果处理
 

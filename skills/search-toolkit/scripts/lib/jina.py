@@ -78,6 +78,7 @@ def fetch(url: str) -> dict[str, Any]:
         endpoint="reader",
         headers=headers,
         timeout=60,
+        cap_exempt=True,  # 读取/抓取豁免站点调用上限（上限只管搜索源）
     )
     return {
         "url": url,

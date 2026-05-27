@@ -63,6 +63,23 @@ class TestCallCap(unittest.TestCase):
         self._http._check_and_increment_cap("doubao")
         self._http._check_and_increment_cap("gemini")
 
+    def test_cap_exempt_never_blocked(self) -> None:
+        # 读取/抓取豁免：同 backend 连续多次都不被拦
+        os.environ["SEARCH_CREW_RUN_ID"] = "run-exempt"
+        for _ in range(5):
+            self._http._check_and_increment_cap("jina", cap_exempt=True)  # 不抛即通过
+
+    def test_search_still_capped_when_not_exempt(self) -> None:
+        # 豁免不影响搜索：同 run 内 exempt 抓取 + 非 exempt 搜索，搜索仍受限
+        os.environ["SEARCH_CREW_RUN_ID"] = "run-mixed"
+        from lib import BackendError  # noqa: PLC0415
+        for _ in range(3):
+            self._http._check_and_increment_cap("jina", cap_exempt=True)  # 抓取豁免
+        self._http._check_and_increment_cap("jina")  # 搜索第 1 次
+        self._http._check_and_increment_cap("jina")  # 搜索第 2 次
+        with self.assertRaises(BackendError):
+            self._http._check_and_increment_cap("jina")  # 搜索第 3 次被拦
+
     def test_cross_run_independent(self) -> None:
         # run-A 把 grok 用完
         os.environ["SEARCH_CREW_RUN_ID"] = "run-A"

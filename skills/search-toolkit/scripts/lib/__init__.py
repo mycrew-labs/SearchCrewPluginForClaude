@@ -19,11 +19,12 @@ class BackendError(Exception):
     其余 4xx 与解析错误视为永久失败。
     """
 
-    def __init__(self, backend: str, message: str, *, retryable: bool = False):
+    def __init__(self, backend: str, message: str, *, retryable: bool = False, http_status: int | None = None):
         super().__init__(f"[{backend}] {message}")
         self.backend = backend
         self.message = message
         self.retryable = retryable
+        self.http_status = http_status  # HTTP 错误码（如 401/403），非 HTTP 错误为 None
 
 
 def env(name: str) -> str | None:

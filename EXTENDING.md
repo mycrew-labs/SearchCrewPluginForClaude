@@ -134,6 +134,21 @@ def search(query: str, max_results: int = 10, **_: Any) -> list[dict[str, Any]]:
 2. 加进 `lib/sites/__init__.py` 的 `ALGOLIA_INDEXES`
 3. 不需要写代码
 
+## 增强 web-page-fetch（读取网页 / 文件）
+
+`web-page-fetch` skill 让主 agent 读 URL 时优先用 `fetch.py`（对标内置 WebFetch），是一个**会持续增强**的底座。当前实现：
+
+- **HTML**：直连探测 Content-Type 为 `text/html` → 送 Jina Reader 渲染（处理 JS、干净 markdown）
+- **raw**：`text/plain` / `text/markdown` / `application/json` / 源码等 / 无 HTML 标签 → 原文直取，不经 Jina
+- **反爬识别**：短内容 + 命中 `环境异常` / `去验证` / `captcha` / `滑块` 等签名 → 判 `anti_bot`，不当正文
+- **读取豁免站点调用上限**（上限只管搜索源）
+
+判定逻辑在 `skills/search-toolkit/scripts/fetch.py`：`_is_raw_content_type`（Content-Type + HTML 标签兜底）、`_looks_blocked`（反爬签名）。要加新源类型 / 解析器在此扩展。
+
+**已知不支持**：微信公众号（`mp.weixin.qq.com`，风控 + 滑块，合规手段过不去）。
+
+**未来方向（[backlog B-006](./openspec/project.md)）**：接入 [OpenCLI](https://github.com/jackwener/OpenCLI) 的 `opencli-browser` 作进阶后端（处理 JS 重 / 非验证码登录墙），agent 内部用、不暴露给用户；需先有远程化调用版本（不依赖本地常驻 Chrome）。
+
 ## 未来候选 backend / 适配器（B-005 之后）
 
 不在当前 change 范围内，欢迎以后单起 change 加入：

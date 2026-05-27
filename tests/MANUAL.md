@@ -7,7 +7,7 @@
 **做**：
 
 1. 在 Claude Code 对话框输入「查一下当前最流行的开源 LLM 推理框架」（不带 slash command）
-2. 在另一个对话输入 `/deep-search 深入调研开源 LLM 推理框架现状`
+2. 在另一个对话输入 `/search-deep 深入调研开源 LLM 推理框架现状`
 3. 尝试 `/search ...`（应不存在）；尝试 `--site ...`（应不被识别）
 
 **期**：1 自动派 fast-search；2 派 deep-search；3 两者都"未识别"。
@@ -20,7 +20,7 @@
 
 ## TC-AGENT-002 ：deep-search 工作模式
 
-**做**：跑一次 `/deep-search`，看 `<run_root>/deep-search/`。
+**做**：跑一次 `/search-deep`，看 `<run_root>/deep-search/`。
 
 **期**：
 
@@ -82,11 +82,11 @@ python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/search.py --query test
 /plugin install search-crew
 ```
 
-**期**：Claude Code 自动拉起 npx chrome-devtools-mcp@latest。`/setup` 报告 Chrome 是否装了。
+**期**：Claude Code 自动拉起 npx chrome-devtools-mcp@latest。`/search-skill-setup` 报告 Chrome 是否装了。
 
 ## TC-PARALLEL-001 ：并行派发 + TaskCreate
 
-**做**：跑 `/deep-search`，观察 task list。
+**做**：跑 `/search-deep`，观察 task list。
 
 **期**：
 
@@ -108,19 +108,19 @@ echo "site: fake.com" > ~/.config/search-crew/pending/routing/fake-rule.yaml
 
 ## TC-UX-001 ：subagent 启动协作邀请
 
-**做**：跑 `/deep-search`。
+**做**：跑 `/search-deep`。
 
 **期**：在派发 subagent 之前主 agent 的可见文本里出现「💡 如果你已经知道权威数据源...」一行。
 
 ## TC-EVIDENCE-001 ：循证证据传递
 
-**做**：跑 `/deep-search`，看主 agent 最终回复 + `report.md`。
+**做**：跑 `/search-deep`，看主 agent 最终回复 + `report.md`。
 
 **期**：每段结论后有 URL（结论性强的段含原文摘录 / 数字）。少 URL 视为缺陷。
 
 ## TC-CONTEXT-001 ：context 卫生
 
-**做**：跑 `/deep-search` 完成后，grep 主 agent 最终回复内容。
+**做**：跑 `/search-deep` 完成后，grep 主 agent 最终回复内容。
 
 **期**：
 

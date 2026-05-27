@@ -1,5 +1,5 @@
 ---
-name: deep-search
+name: search-deep
 description: 启动一次深度调研。主 agent 派 deep-search subagent 规划 + 多轮派活 + 综合，最终产出 HTML + Markdown 双格式报告。
 ---
 

@@ -58,8 +58,14 @@ def _cap_for(backend: str) -> int:
         return _DEFAULT_AI_CAP if backend in _AI_BACKENDS else _DEFAULT_NON_AI_CAP
 
 
-def _check_and_increment_cap(backend: str, query: str | None = None) -> None:
-    """达到上限直接 raise；未达上限自增。"""
+def _check_and_increment_cap(backend: str, query: str | None = None, cap_exempt: bool = False) -> None:
+    """达到上限直接 raise；未达上限自增。
+
+    `cap_exempt=True`：读取 / 抓取类操作（jina-reader、fetch.py 直连探测）豁免上限——
+    上限只约束搜索源，读取已知 URL 是正常多次操作（fast-search 抓 top N、deep-search 多页深挖）。
+    """
+    if cap_exempt:
+        return
     key = (_run_id(), backend)
     current = _call_counter.get(key, 0)
     cap = _cap_for(backend)
@@ -130,13 +136,15 @@ def request_json(
     timeout: int = DEFAULT_TIMEOUT,
     units: int | None = 1,
     query: str | None = None,
+    cap_exempt: bool = False,
 ) -> Any:
     """发起 JSON 请求并返回反序列化结果。
 
     `backend` / `endpoint` 用于打点；`units` 用于 cost 估算（默认 1 次请求 = 1 unit）；
-    `query` 可选，搜索类 backend 建议传，用于「搜索摘要」段渲染。
+    `query` 可选，搜索类 backend 建议传，用于「搜索摘要」段渲染；
+    `cap_exempt` 读取/抓取类操作豁免站点调用上限（见 `_check_and_increment_cap`）。
     """
-    _check_and_increment_cap(backend, query=query)
+    _check_and_increment_cap(backend, query=query, cap_exempt=cap_exempt)
 
     if params:
         sep = "&" if "?" in url else "?"
@@ -165,7 +173,7 @@ def request_json(
         except Exception:
             pass
         retryable = e.code in (429, 502, 503, 504)
-        raise BackendError(backend, f"HTTP {e.code}: {body or e.reason}", retryable=retryable) from e
+        raise BackendError(backend, f"HTTP {e.code}: {body or e.reason}", retryable=retryable, http_status=e.code) from e
     except urllib.error.URLError as e:
         status = "network-error"
         raise BackendError(backend, f"网络错误: {e.reason}", retryable=True) from e
@@ -200,9 +208,48 @@ def request_text(
     timeout: int = DEFAULT_TIMEOUT,
     units: int | None = 1,
     query: str | None = None,
+    cap_exempt: bool = False,
 ) -> str:
     """发起请求返回原文（用于抓取页面 / markdown）。"""
-    _check_and_increment_cap(backend, query=query)
+    return _request_text_impl(
+        method, url, backend=backend, endpoint=endpoint, headers=headers,
+        timeout=timeout, units=units, query=query, cap_exempt=cap_exempt,
+    )[0]
+
+
+def request_text_meta(
+    method: str,
+    url: str,
+    *,
+    backend: str,
+    endpoint: str,
+    headers: dict[str, str] | None = None,
+    timeout: int = DEFAULT_TIMEOUT,
+    units: int | None = 1,
+    query: str | None = None,
+    cap_exempt: bool = False,
+) -> tuple[str, str]:
+    """同 request_text，但额外返回响应 Content-Type（小写、去参数），供 fetch.py 判 raw/HTML。"""
+    return _request_text_impl(
+        method, url, backend=backend, endpoint=endpoint, headers=headers,
+        timeout=timeout, units=units, query=query, cap_exempt=cap_exempt,
+    )
+
+
+def _request_text_impl(
+    method: str,
+    url: str,
+    *,
+    backend: str,
+    endpoint: str,
+    headers: dict[str, str] | None = None,
+    timeout: int = DEFAULT_TIMEOUT,
+    units: int | None = 1,
+    query: str | None = None,
+    cap_exempt: bool = False,
+) -> tuple[str, str]:
+    """返回 (text, content_type)。content_type 为小写、去掉 `; charset=` 等参数。"""
+    _check_and_increment_cap(backend, query=query, cap_exempt=cap_exempt)
 
     final_headers = {"User-Agent": USER_AGENT}
     if headers:
@@ -213,10 +260,12 @@ def request_text(
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             status = resp.status
-            return resp.read().decode("utf-8", errors="replace")
+            text = resp.read().decode("utf-8", errors="replace")
+            ctype = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            return text, ctype
     except urllib.error.HTTPError as e:
         status = e.code
-        raise BackendError(backend, f"HTTP {e.code}: {e.reason}", retryable=e.code in (429, 502, 503, 504)) from e
+        raise BackendError(backend, f"HTTP {e.code}: {e.reason}", retryable=e.code in (429, 502, 503, 504), http_status=e.code) from e
     except urllib.error.URLError as e:
         status = "network-error"
         raise BackendError(backend, f"网络错误: {e.reason}", retryable=True) from e

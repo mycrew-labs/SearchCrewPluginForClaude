@@ -5,9 +5,7 @@
 ## Purpose
 
 让用户对自己的搜索偏好（routing、单价表、自定义适配器、自定义参数）拥有完全所有权——既不被 plugin 升级覆盖，也不会被 AI 在用户不知情下偷偷改。
-
 ## Requirements
-
 ### Requirement: ~/.config/search-crew/ 是 runtime 唯一配置真相
 所有 subagent / skill 脚本 runtime MUST 只读 `~/.config/search-crew/`，**MUST NOT** 读 plugin 内置 `defaults/`（除首次安装 seed 那一次）。plugin 升级**不动** active；用户对 active 拥有完全所有权（可禁用 / 替换 / 重写任何系统默认行为）。
 
@@ -65,13 +63,13 @@ Stop hook 在主 agent 工作告一段落时 MUST 扫描 `~/.config/search-crew/
 - **THEN** 产物中显式标注「来自 pending，未确认」，让用户区分
 
 ### Requirement: Onboarding 时提示备份 active 目录
-`/setup` 首次运行时 MUST 醒目提示用户：`~/.config/search-crew/` 是长期沉淀；强烈建议放 iCloud / Dropbox / dotfiles 仓库（原位置改软链接），或定期手动备份。提示同步写入 `~/.config/search-crew/backup-info.md` 让用户随时能查。
+`/search-skill-setup`（插件命名空间下为 `/search-crew:search-skill-setup`）首次运行时 MUST 醒目提示用户：`~/.config/search-crew/` 是长期沉淀；强烈建议放 iCloud / Dropbox / dotfiles 仓库（原位置改软链接），或定期手动备份。提示同步写入 `~/.config/search-crew/backup-info.md` 让用户随时能查。
 
 **Lock**: user-confirmed
-**Confirmed-At**: 2026-05-21
+**Confirmed-At**: 2026-05-26
 
-#### Scenario: 首次 /setup
-- **WHEN** 用户首次跑 `/setup` 命令
+#### Scenario: 首次 /search-skill-setup
+- **WHEN** 用户首次跑 `/search-skill-setup` 命令
 - **THEN** 输出中含醒目的备份建议段落（不是淹没在长 text 中间一行）；`backup-info.md` 已写入 active 目录
 
 ### Requirement: chrome-devtools-mcp 通过 plugin.json 自动拉起
@@ -83,3 +81,4 @@ Plugin MUST 通过 `.claude-plugin/plugin.json` 的 `mcpServers.chrome-devtools`
 #### Scenario: 安装 plugin 自动启动 MCP
 - **WHEN** 用户跑 `/plugin install search-crew@search-crew`
 - **THEN** Claude Code 按 plugin.json 自动启动 chrome-devtools-mcp 进程；用户首次使用 site-search 走浏览器路径时直接可用（前提是本机有 Chrome）
+
