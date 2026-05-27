@@ -109,6 +109,17 @@ git config core.hooksPath .githooks
   ! python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/usage.py --last 10
 ```
 
+### 8. 进阶（可选）：远程 browser-host
+
+> 默认关闭，绝大多数用户用不到，**不要**主动引导普通用户配。仅当用户明确要抓「登录墙 / 付费墙」内容（如付费 paper PDF）且已自建 browser-host 时才提。
+
+web-page-fetch 遇到 `needs_auth`（登录 / 付费墙）默认走 `on_blocked` 策略（honest / collaborate）。若用户在一台带桌面的 Linux 上跑了 [opencli-browser-host](https://github.com/mycrew-labs)（用真实登录态浏览器抓取 + frp 暴露的 HTTP API），可在 `~/.config/search-crew/limits.yaml` 的 `web_page_fetch.remote_host` 填端点 + basic auth 启用之。
+
+- 这是 **backlog B-006 的预留配置槽**，客户端接线尚未落地——现在填了也还不生效。
+- 安全提醒：该 API 背后是登录态真实浏览器；只暴露带鉴权 + 只读收窄的 HTTP 包装，别裸暴露 daemon。
+
+setup 检查到 `remote_host.enabled: true` 时，可顺带 `curl <endpoint>` 探一下连通性并告知用户。
+
 ## 关键约束
 
 - 必跑 backend 检查；不允许跳过假装一切正常

@@ -34,3 +34,13 @@ call_cap:
 # 未来 B-006 远程 browser-host 就绪后，needs_auth 会先自动走远程，仍拿不到才落到本策略。
 web_page_fetch:
   on_blocked: honest
+
+  # 进阶（可选，默认关）：远程 browser-host —— 遇 needs_auth（登录/付费墙）时，调一个
+  # 用真实登录态浏览器抓取的远程 HTTP API（见 opencli-browser-host 项目 / backlog B-006）。
+  # 现在是**预留配置槽**，B-006 客户端落地前不生效。启用前你得先在一台带桌面的 Linux
+  # 上把 opencli-browser-host 跑起来 + frp 暴露，再把端点和 basic auth 填这里。
+  remote_host:
+    enabled: false
+    endpoint: ""              # 如 https://browser-host.yourdomain.com/fetch
+    auth_user: ""             # frp HTTP 代理 basic auth 用户名
+    auth_pass: ""             # frp HTTP 代理 basic auth 密码（建议从环境变量注入，别硬写）
