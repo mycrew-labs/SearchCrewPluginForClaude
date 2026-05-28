@@ -66,19 +66,28 @@ def search(query: str, *, max_results: int = 10, model: str | None = None) -> di
         summary = "".join(p.get("text", "") for p in parts if isinstance(p, dict))
         grounding = cand.get("groundingMetadata") or cand.get("grounding_metadata") or {}
         chunks = grounding.get("groundingChunks") or grounding.get("grounding_chunks") or []
-        citations: list[dict[str, Any]] = []
-        for ch in chunks[:max_results]:
+        # groundingSupports：每段正文 → 支撑它的 chunk 下标 + 段末偏移（实测有）。
+        # 据此给每个 chunk 算一个 end_index（取引用它的最后一段的段末位置），用于插脚注。
+        supports = grounding.get("groundingSupports") or grounding.get("grounding_supports") or []
+        chunk_end: dict[int, int] = {}
+        for sup in supports:
+            seg = sup.get("segment") or {}
+            end = seg.get("endIndex")
+            if end is None:
+                continue
+            for ci in (sup.get("groundingChunkIndices") or sup.get("grounding_chunk_indices") or []):
+                if isinstance(ci, int):
+                    chunk_end[ci] = max(chunk_end.get(ci, 0), end)
+        citations = []
+        for i, ch in enumerate(chunks[:max_results]):
             web = ch.get("web") or {}
             url = web.get("uri") or web.get("url") or ""
             if not url:
                 continue
-            citations.append(
-                {
-                    "url": url,
-                    "title": web.get("title", ""),
-                    "snippet": "",
-                }
-            )
+            cit: dict[str, Any] = {"url": url, "title": web.get("title", ""), "snippet": ""}
+            if i in chunk_end:
+                cit["end_index"] = chunk_end[i]
+            citations.append(cit)
     except BackendError:
         raise
     except Exception as e:

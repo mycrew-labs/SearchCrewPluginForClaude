@@ -18,13 +18,16 @@ python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/ai_search.py --query "
 ```
 
 - AI 源按语言/语境自动选（中文→doubao、英文舆论→grok、全球综述→gemini）；无需你指定。
-- 输出 JSON：`{backend, summary, citations, calls, cost_line, fallback}`。调用已自动进永久用量日志（`usage.py` 查历史可见），**无需** finalize_usage、**无需**造 run 目录。
+- 输出 JSON：`{backend, summary, summary_cited, has_footnotes, sources, citations, calls, cost_line, fallback}`。调用已自动进永久用量日志（`usage.py` 查历史可见），**无需** finalize_usage、**无需**造 run 目录。
 - 若返回 `fallback: WEBSEARCH_FALLBACK`（AI key 全缺或调用失败）→ 改用内置 WebSearch，或跑 `search.py --prefer serper` 拿普通结果，照常给用户答。
 
 ### 2. 最终回复用户
 
-- **核心结论**：基于 `summary` 用你自己的话呈现，**必须**附 `citations` 里的来源 URL（不编造）。
-- **cost 一行**：直接用输出里的 `cost_line` 字段拼到回复末尾（已是现成字符串）。
+- **核心结论 + 逐条来源**：
+  - `has_footnotes: true`（grok/gemini，结论里带 `[n]` 标记）→ 用 `summary_cited` 呈现（保留 `[n]`），并在末尾列 `sources`（`[n] 标题 — url`），让用户能逐条点开核对。
+  - `has_footnotes: false`（doubao 无偏移）→ 用 `summary` 呈现，末尾给 `sources` 来源列表（含站名 / 时间），不硬凑逐行脚注。
+  - 一律**不编造**来源；脚注是"模型声明引用了此源"，逐条原文级循证请提示走 `/search-deep`。
+- **cost 一行**：直接用输出里的 `cost_line` 拼到回复末尾。
 
 **不要**展开 cost 拆分。
 

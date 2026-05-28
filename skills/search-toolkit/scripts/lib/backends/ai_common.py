@@ -51,13 +51,18 @@ def parse_responses_api(data: dict[str, Any], backend: str) -> tuple[str, list[d
                     continue
                 url = ann.get("url") or ""
                 if url:
-                    citations.append(
-                        {
-                            "url": url,
-                            "title": ann.get("title", ""),
-                            "snippet": ann.get("snippet", "") or ann.get("content", ""),
-                        }
-                    )
+                    cit = {
+                        "url": url,
+                        "title": ann.get("title", ""),
+                        "snippet": ann.get("snippet", "") or ann.get("content", ""),
+                    }
+                    # 注：grok 的 url_citation 虽带 start_index/end_index，但 grok 的 summary
+                    # 正文里**已内联** `[n]` 标记（annotation.title 即该编号），故这里不另存偏移、
+                    # 不让 ai_search 再插一遍（会重复）。doubao 无偏移、无内联标记，只带富元数据。
+                    for k in ("site_name", "publish_time"):
+                        if ann.get(k):
+                            cit[k] = ann.get(k)
+                    citations.append(cit)
     if not found_message:
         raise BackendError(backend, f"Responses API 无 message 输出: {str(data)[:200]}")
     return "".join(summary_parts), citations
@@ -78,7 +83,12 @@ def make_envelope(
             continue
         title = (c.get("title") or "").strip() or url
         snippet = (c.get("snippet") or "").strip()
-        norm_citations.append({"url": url, "title": title, "snippet": snippet})
+        nc: dict[str, Any] = {"url": url, "title": title, "snippet": snippet}
+        # 透传可用于脚注的字符偏移（grok / gemini）与富元数据（doubao），别丢
+        for k in ("start_index", "end_index", "site_name", "publish_time"):
+            if c.get(k) is not None:
+                nc[k] = c[k]
+        norm_citations.append(nc)
         results.append(
             normalize_result(
                 title=title,

@@ -30,7 +30,7 @@ class TestAiSearch(unittest.TestCase):
         with mock.patch.dict(ai_search.ai_summary.AI_BACKEND_MODULES, {"doubao": fake_doubao}):
             with mock.patch.object(ai_search.ai_summary, "pick_backend", side_effect=lambda x: x) as pick:
                 with mock.patch.object(ai_search.ai_summary, "resolve_model", return_value="m"):
-                    with mock.patch.object(ai_search.ai_summary, "run_ai", return_value={"backend": "doubao", "summary": "综述", "citations": ["u"]}):
+                    with mock.patch.object(ai_search.ai_summary, "run_ai", return_value={"backend": "doubao", "summary": "综述", "citations": [{"url": "u"}]}):
                         out = _run(["--query", "国产新能源车推荐"])
         pick.assert_called_with("doubao")  # 中文 → 显式传 doubao
         self.assertEqual(out["backend"], "doubao")
@@ -51,6 +51,41 @@ class TestAiSearch(unittest.TestCase):
             out = _run(["--query", "anything"])
         self.assertIsNone(out["backend"])
         self.assertEqual(out["fallback"], "WEBSEARCH_FALLBACK")
+
+
+class TestRenderCitations(unittest.TestCase):
+    def test_with_offsets_inserts_footnotes(self):
+        summary = "PostgreSQL 很强。Redis 很快。"
+        # end_index 指向各句末（按字符数）
+        cits = [
+            {"url": "https://pg.example", "title": "PG", "end_index": len("PostgreSQL 很强。")},
+            {"url": "https://redis.example", "title": "Redis", "end_index": len(summary)},
+        ]
+        cited, sources, has = ai_search._render_citations(summary, cits)
+        self.assertTrue(has)
+        self.assertIn("[1]", cited)
+        self.assertIn("[2]", cited)
+        # [1] 在 [2] 之前出现
+        self.assertLess(cited.index("[1]"), cited.index("[2]"))
+        self.assertEqual([s["n"] for s in sources], [1, 2])
+        self.assertEqual(sources[0]["url"], "https://pg.example")
+
+    def test_no_offsets_returns_plain_list(self):
+        summary = "一段综述。"
+        cits = [
+            {"url": "https://a", "title": "A", "site_name": "站A", "publish_time": "2026-05"},
+            {"url": "https://b", "title": "B"},
+        ]
+        cited, sources, has = ai_search._render_citations(summary, cits)
+        self.assertFalse(has)
+        self.assertEqual(cited, summary)  # 无偏移 → 正文不动
+        self.assertNotIn("[1]", cited)
+        self.assertEqual(sources[0]["site_name"], "站A")  # 富元数据保留
+
+    def test_empty_citations(self):
+        _cited, sources, has = ai_search._render_citations("x", [])
+        self.assertFalse(has)
+        self.assertEqual(sources, [])
 
 
 if __name__ == "__main__":
