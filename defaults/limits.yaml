@@ -8,6 +8,9 @@ last_updated: "2026-05-21"
 fast_search:
   max_results: 5         # 每次抓多少个搜索结果
   fetch_timeout_sec: 30  # 单次 fetch 超时
+  # fetch.py 多 URL 并发抓取的 worker 数。默认 2 = 贴 Jina 免费档「2 concurrent」上限
+  # （免费档瓶颈是并发数不是 RPM）。Paid 档可调 50、Premium 500。设 >2 在免费档会撞并发限吃 429。
+  fetch_concurrency: 2
 
 site_search:
   max_results: 10

@@ -69,14 +69,6 @@ def _on_blocked_policy() -> str:
         return "honest"
 
 
-def _emit_blocked(url: str, reason: str) -> None:
-    """被挡（anti_bot / needs_auth）统一出口，带上 on_blocked 策略透传给主 agent。"""
-    emit({
-        "source": None, "url": url, "markdown": None,
-        "blocked": reason, "on_blocked": _on_blocked_policy(), "fallback": None,
-    })
-
-
 def _is_raw_content_type(ctype: str, body: str) -> bool:
     """Content-Type 主导判 raw/HTML；缺失或含糊时按有无 HTML 标签兜底。"""
     if ctype in _HTML_CTYPES:
@@ -90,53 +82,88 @@ def _is_raw_content_type(ctype: str, body: str) -> bool:
     return not any(m in head for m in _HTML_TAG_MARKERS)
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description="Search Crew URL 抓取")
-    ap.add_argument("url")
-    args = ap.parse_args()
-    url = args.url
+def _blocked_payload(url: str, reason: str) -> dict:
+    return {
+        "source": None, "url": url, "markdown": None,
+        "blocked": reason, "on_blocked": _on_blocked_policy(), "fallback": None,
+    }
 
+
+def _fetch_one(url: str) -> dict:
+    """抓单个 URL，返回结果 dict（不打印）。供单抓与并发 batch 共用。"""
     # 1. 直连 GET（豁免站点调用上限），拿 body + Content-Type
     try:
         body, ctype = _http.request_text_meta(
             "GET", url, backend="fetch", endpoint="direct", timeout=30, cap_exempt=True,
         )
     except BackendError as e:
-        # 401/403 → 登录墙/付费墙，归 needs_auth（未来 B-006 远程登录态会话拿）
         if e.http_status in (401, 403):
-            print(f"[fetch] 直连 {e.http_status}，判 needs_auth", file=sys.stderr)
-            _emit_blocked(url, "needs_auth")
-            return 0
+            print(f"[fetch] 直连 {e.http_status}，判 needs_auth：{url}", file=sys.stderr)
+            return _blocked_payload(url, "needs_auth")
         print(f"[fetch] 直连失败：{e}", file=sys.stderr)
-        emit({"source": None, "url": url, "markdown": None, "fallback": "WEBFETCH_FALLBACK"})
-        return 0
+        return {"source": None, "url": url, "markdown": None, "fallback": "WEBFETCH_FALLBACK"}
 
     # 2. 反爬识别（直连 body）
     if _looks_blocked(body):
-        print("[fetch] 直连命中反爬墙", file=sys.stderr)
-        _emit_blocked(url, "anti_bot")
-        return 0
+        print(f"[fetch] 直连命中反爬墙：{url}", file=sys.stderr)
+        return _blocked_payload(url, "anti_bot")
 
     # 3. raw → 原文直返
     if _is_raw_content_type(ctype, body):
-        emit({"source": "raw", "url": url, "markdown": body, "fallback": None})
-        return 0
+        return {"source": "raw", "url": url, "markdown": body, "fallback": None}
 
     # 4. HTML → 二次送 Jina Reader 渲染（更干净、处理 JS）
     try:
         data = jina.fetch(url)
     except BackendError as e:
         print(f"[fetch] jina-reader 失败：{e}", file=sys.stderr)
-        emit({"source": None, "url": url, "markdown": None, "fallback": "WEBFETCH_FALLBACK"})
-        return 0
+        return {"source": None, "url": url, "markdown": None, "fallback": "WEBFETCH_FALLBACK"}
 
     # 5. Jina 渲染结果也查反爬（微信经 Jina 同样是验证页）
     if _looks_blocked(data.get("markdown", "") or ""):
-        print("[fetch] jina-reader 命中反爬墙", file=sys.stderr)
-        _emit_blocked(url, "anti_bot")
+        print(f"[fetch] jina-reader 命中反爬墙：{url}", file=sys.stderr)
+        return _blocked_payload(url, "anti_bot")
+
+    return {"source": "jina-reader", **data, "fallback": None}
+
+
+def _fetch_concurrency() -> int:
+    """并发抓取的 worker 数。默认 2（贴 Jina 免费档「2 concurrent」上限）。
+
+    Jina 速率限制按 API key 计：Free 2 并发 / Paid 50 / Premium 500。免费档并发是
+    瓶颈（非 RPM），设 >2 会撞并发限吃 429。Paid 用户可在 limits.yaml 调高。
+    """
+    try:
+        limits = config.load_limits() or {}
+        v = int((limits.get("fast_search") or {}).get("fetch_concurrency", 2))
+        return max(1, v)
+    except Exception:
+        return 2
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Search Crew URL 抓取（支持多 URL 并发）")
+    ap.add_argument("urls", nargs="+", help="一个或多个 URL；多个时并发抓取，输出 JSON 数组")
+    args = ap.parse_args()
+
+    # 单 URL → 单对象（向后兼容）；多 URL → JSON 数组，按输入顺序，并发抓
+    if len(args.urls) == 1:
+        emit(_fetch_one(args.urls[0]))
         return 0
 
-    emit({"source": "jina-reader", **data, "fallback": None})
+    import concurrent.futures
+    workers = min(_fetch_concurrency(), len(args.urls))
+    results: list[dict | None] = [None] * len(args.urls)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        futs = {pool.submit(_fetch_one, u): i for i, u in enumerate(args.urls)}
+        for fut in concurrent.futures.as_completed(futs):
+            i = futs[fut]
+            try:
+                results[i] = fut.result()
+            except Exception as e:  # 单条异常不拖垮整批
+                results[i] = {"source": None, "url": args.urls[i], "markdown": None,
+                              "fallback": "WEBFETCH_FALLBACK", "error": str(e)}
+    emit(results)  # type: ignore[arg-type]
     return 0
 
 

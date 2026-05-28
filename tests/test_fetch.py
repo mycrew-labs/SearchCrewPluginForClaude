@@ -7,6 +7,7 @@ import pathlib
 import sys
 import tempfile
 import unittest
+from typing import Any
 from unittest import mock
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -114,6 +115,65 @@ class TestFetchDispatch(unittest.TestCase):
             with mock.patch.object(fetch.jina, "fetch", return_value={"url": "u", "markdown": "环境异常 去验证", "source": "jina-reader"}):
                 out = self._run("https://mp.weixin.qq.com/s?x=2")
         self.assertEqual(out.get("blocked"), "anti_bot")
+
+
+class TestBatchFetch(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["XDG_CONFIG_HOME"] = self.tmp.name
+        os.environ["XDG_STATE_HOME"] = self.tmp.name
+        os.environ["SEARCH_CREW_RUN_ID"] = "test-batch"
+        from lib import _http
+        _http.reset_call_counter()
+        self._payload: Any = None
+
+    def tearDown(self):
+        for k in ("XDG_CONFIG_HOME", "XDG_STATE_HOME", "SEARCH_CREW_RUN_ID"):
+            os.environ.pop(k, None)
+        self.tmp.cleanup()
+
+    def _run(self, urls):
+        with mock.patch.object(fetch, "emit", lambda p: setattr(self, "_payload", p)):
+            with mock.patch.object(sys, "argv", ["fetch.py", *urls]):
+                fetch.main()
+        assert self._payload is not None, "fetch.main 未产出 payload"
+        return self._payload
+
+    def test_multi_url_returns_ordered_list(self):
+        # 每个 url 的 raw 正文 = 其自身，验证并发结果按输入顺序对回
+        def fake_meta(_method, url, **_kw):
+            return (f"RAW:{url}", "text/plain")
+        urls = ["https://a.test/1", "https://b.test/2", "https://c.test/3"]
+        with mock.patch.object(fetch._http, "request_text_meta", side_effect=fake_meta):
+            out = self._run(urls)
+        self.assertIsInstance(out, list)
+        self.assertEqual(len(out), 3)
+        for i, u in enumerate(urls):
+            self.assertEqual(out[i]["url"], u)
+            self.assertEqual(out[i]["markdown"], f"RAW:{u}")
+            self.assertEqual(out[i]["source"], "raw")
+
+    def test_single_url_still_object_not_list(self):
+        with mock.patch.object(fetch._http, "request_text_meta", return_value=("RAW", "text/plain")):
+            out = self._run(["https://a.test/only"])
+        self.assertIsInstance(out, dict)
+        self.assertEqual(out["source"], "raw")
+
+    def test_one_failure_does_not_break_batch(self):
+        from lib import BackendError
+        def fake_meta(_method, url, **_kw):
+            if "bad" in url:
+                raise BackendError("fetch", "网络错误", retryable=True)
+            return (f"RAW:{url}", "text/plain")
+        urls = ["https://ok.test/1", "https://bad.test/2", "https://ok.test/3"]
+        with mock.patch.object(fetch._http, "request_text_meta", side_effect=fake_meta):
+            out = self._run(urls)
+        self.assertEqual(out[0]["source"], "raw")
+        self.assertEqual(out[1]["fallback"], "WEBFETCH_FALLBACK")  # 坏的那条单独降级
+        self.assertEqual(out[2]["source"], "raw")  # 其余不受影响
+
+    def test_concurrency_default_is_two(self):
+        self.assertEqual(fetch._fetch_concurrency(), 2)
 
 
 if __name__ == "__main__":
