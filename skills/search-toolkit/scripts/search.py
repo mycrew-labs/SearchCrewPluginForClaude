@@ -108,7 +108,16 @@ def main() -> int:
                 emit(_run_ai(picked, args.query, args.max_results, model))
                 return 0
             except BackendError as e:
-                print(f"[search] AI backend {picked} 失败：{e}", file=sys.stderr)
+                print(f"[search] AI backend {picked} 失败：{e}，回落非 AI 搜索", file=sys.stderr)
+        elif args.ai_backend:
+            # 用户显式点名了某 AI backend 却挑不中 → 多半缺对应 key / 该层被禁，别静默
+            print(
+                f"[search] 显式指定的 AI backend '{args.ai_backend}' 不可用"
+                f"（缺 {args.ai_backend.upper()}_API_KEY 或 ai_summary 未启用），回落非 AI 搜索",
+                file=sys.stderr,
+            )
+        else:
+            print("[search] 无可用 AI 综述 backend（三家 key 均缺或 ai_summary 未启用），回落非 AI 搜索", file=sys.stderr)
         # AI key 全缺 或 AI 调用失败 → 按 fallback_on_no_key 回落
         fallback_be = (_ai_summary_cfg().get("fallback_on_no_key") or "jina").lower()
         if fallback_be == "serper":
