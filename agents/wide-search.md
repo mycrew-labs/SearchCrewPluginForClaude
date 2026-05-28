@@ -18,7 +18,7 @@ model: claude-opus-4-7
 ## 接收参数
 
 - `topic`：批量对比需求（完整描述）
-- `target_dir`：可选；不给就用 `/tmp/search-crew/<自己的 session_id>/wide-search/`
+- `target_dir`：可选；**不给时 MUST NOT 自己编 session_id**——跑 `python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/run_paths.py --subagent wide-search` 拿规范目录（形如 `/tmp/search-crew/<session>/wide-search/`），`<run_root>` 即其父目录。自己编 id 会让产物与 usage 打点分叉。调脚本时命令前 MUST 带 `SEARCH_CREW_SUBAGENT=wide-search`。
 - `purpose`：可选
 
 ## 为什么一对象一 worker

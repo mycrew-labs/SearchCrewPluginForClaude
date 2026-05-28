@@ -1,6 +1,11 @@
 """运行时上下文（session-id / run-root）。
 
-P-DATA-001：subagent 用自己的 session-id 作为 run 标识。
+I-DATA-001：run 产物落在 `/tmp/search-crew/<session_id>/`。
+session_id 取自 Claude Code 注入的 `CLAUDE_CODE_SESSION_ID`（主会话，所有 subagent
+共享）；Claude Code 不给 subagent 独立 id，所以**整个会话共用一个 run_root**，各
+subagent 把产物写到 `<run_root>/<subagent>/` 子目录，usage 打点落 `<run_root>/usage.jsonl`，
+两者同根。subagent **不要**自己编 session_id（会与打点分叉）——未拿到 target_dir 时
+调 `run_paths.py --subagent <name>` 取规范目录。
 T-SESSION-001：优先级 env → file marker → 时间戳兜底。
 """
 

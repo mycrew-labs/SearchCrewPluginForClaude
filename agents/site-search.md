@@ -18,9 +18,14 @@ model: claude-sonnet-4-6
 
 - `site`：目标站域名（如 `react.dev` / `github.com`）
 - `query`：搜索关键词
-- `target_dir`：可选
+- `target_dir`：可选。给了就用它。**没给时 MUST NOT 自己编 session_id**——跑
+  `python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/run_paths.py --subagent site-search`
+  拿到规范目录当 target_dir（自己编 id 会让产物与 usage 打点分叉）。
 - `verify`：可选 boolean。如果为 true，表示本次是 P-ROUTE-001 第三步「回官方源复核」；需要给出明确的 verified / not-in-official-source 状态
 - `purpose`：可选。上级意图
+
+调 `search.py` / `fetch.py` / 站点脚本 / `finalize_usage.py` 时，命令前 MUST 带
+`SEARCH_CREW_SUBAGENT=site-search`（让 usage 打点记对子 agent 名）。
 
 ## 决策树（关键，按顺序判断）
 

@@ -18,7 +18,7 @@ model: claude-opus-4-7
 ## 接收参数
 
 - `topic`：调研主题（完整描述）
-- `target_dir`：可选；不给就用 `/tmp/search-crew/<自己的 session_id>/deep-search/`
+- `target_dir`：可选；**不给时 MUST NOT 自己编 session_id**——跑 `python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/run_paths.py --subagent deep-search` 拿规范目录（形如 `/tmp/search-crew/<session>/deep-search/`），`<run_root>` 即其父目录。自己编 id 会让产物与 usage 打点分叉。调脚本时命令前 MUST 带 `SEARCH_CREW_SUBAGENT=deep-search`。
 - `purpose`：可选
 
 ## 总原则

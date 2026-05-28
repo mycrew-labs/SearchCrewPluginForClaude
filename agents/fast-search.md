@@ -18,8 +18,15 @@ model: claude-haiku-4-5-20251001
 上级（主 agent 或 deep-search）派发时会给你：
 
 - `query`：当前要搜的问题（必填）
-- `target_dir`：可选。如果给了，所有产物落到这个目录；没给，自己用 `/tmp/search-crew/<自己的 session_id>/fast-search/`
+- `target_dir`：可选。给了就用它。**没给时 MUST NOT 自己编 session_id**——跑
+  `python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/run_paths.py --subagent fast-search`
+  拿到规范目录（形如 `/tmp/search-crew/<session>/fast-search/`）当 target_dir。`<run_root>` 即其父目录。
+  （自己编 id 会导致产物目录与 usage 打点分叉，cost 统计读不到。）
 - `hint`：可选。上级对方向 / 来源的偏好
+
+调 `search.py` / `fetch.py` / `finalize_usage.py` 时，命令前 MUST 带环境变量
+`SEARCH_CREW_SUBAGENT=fast-search`（让 usage 打点能记对子 agent 名，否则记成 unknown），
+例如 `SEARCH_CREW_SUBAGENT=fast-search python3 .../search.py ...`。
 
 ## 工作流
 
@@ -80,6 +87,8 @@ react@19, suspense, useTransition, ...
 
 ## 关键约束（不要违反）
 
+- **体量克制（fast = 快）**：你是单轮快搜，不是写综述。每个 `fast-search-NNN.md` 只留**关键证据原文 + 要点**（目标 ≤ ~80 行/文件），**不要**把整页正文逐字搬进来；INDEX 保持简洁（要点 + ranking + 关键词，别写长篇）。长篇对比 / 综述是 deep-search 的活。过度产出会让单轮跑成几分钟。
+- **抓取克制**：优先只深抓 top 3-5 高 ranking 结果；能靠搜索返回的摘要回答的就别再逐页 fetch。Jina Reader 渲染慢页可能单页 10-20s，逐条全抓会显著拖慢；超 `fast_search.fetch_timeout_sec` 会超时跳过，属正常。
 - **不做站内精确搜索**：那是 site-search 的工作；遇到主题涉及临床 / 专利 / 学术 / 官方文档时，**返回信号给上级**，请上级派 site-search 而不是自己冲过去
 - **不做多轮挖掘**：你只跑一轮；要继续挖让 deep-search 接力
 - **ranking + 关键词清单必须当下完成**，不允许「全抓回来后续再补」
