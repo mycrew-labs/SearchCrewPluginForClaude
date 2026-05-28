@@ -26,7 +26,19 @@ def is_available_reader() -> bool:
     return True
 
 
-def search(query: str, *, max_results: int = 10, language: str | None = None) -> list[dict[str, Any]]:
+def search(
+    query: str,
+    *,
+    max_results: int = 10,
+    language: str | None = None,
+    include_content: bool = False,
+) -> list[dict[str, Any]]:
+    """通用搜索。
+
+    `include_content=True` 时不加 `X-Respond-With: no-content`，让 s.jina.ai 一次返回
+    每条结果的正文（省掉随后逐页 fetch 的 round-trip），正文放进结果的 `content` 字段。
+    默认 False（只回链接 + 摘要，轻量，调用方按需再选择性 fetch）。
+    """
     api_key = env("JINA_API_KEY")
     if not api_key:
         raise BackendError(BACKEND, "缺少 JINA_API_KEY")
@@ -34,8 +46,9 @@ def search(query: str, *, max_results: int = 10, language: str | None = None) ->
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Accept": "application/json",
-        "X-Respond-With": "no-content",
     }
+    if not include_content:
+        headers["X-Respond-With"] = "no-content"
     if language:
         headers["X-Locale"] = language
 
@@ -53,15 +66,17 @@ def search(query: str, *, max_results: int = 10, language: str | None = None) ->
     items = (data or {}).get("data") or []
     results = []
     for it in items[:max_results]:
-        snippet = it.get("description", "") or (it.get("content") or "")[:280]
-        results.append(
-            normalize_result(
-                title=it.get("title", ""),
-                url=it.get("url", ""),
-                snippet=snippet,
-                source="jina-search",
-            )
+        content = it.get("content") or ""
+        snippet = it.get("description", "") or content[:280]
+        r = normalize_result(
+            title=it.get("title", ""),
+            url=it.get("url", ""),
+            snippet=snippet,
+            source="jina-search",
         )
+        if include_content and content:
+            r["content"] = content
+        results.append(r)
     return results
 
 

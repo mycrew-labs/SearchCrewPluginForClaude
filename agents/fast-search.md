@@ -30,12 +30,13 @@ model: claude-haiku-4-5-20251001
 
 ## 工作流
 
-1. **拼搜索**：调 `python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/search.py --query "<query>" --max-results 5`
+1. **拼搜索（一次带回正文）**：调 `python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/search.py --query "<query>" --max-results 5 --with-content`。`--with-content` 让 jina 一次调用就返回每条结果的正文（在结果的 `content` 字段），省掉随后逐页 fetch 的 round-trip（实测端到端从 ~10s 压到 ~2s）。
 2. **看返回**：
     - 正常 → 跳到步骤 3
     - 返回 `WEBSEARCH_FALLBACK` → 改用内置 WebSearch 工具（自带于 Claude Code）
+    - 注：`--with-content` 仅对 jina 生效；若回落到 serper（结果无 `content`），按步骤 4 补抓
 3. **挑结果排序**：按相关度 / 权威性 / 时效性给每条打 ranking（0-10），保留 top N（默认 5）
-4. **抓内容（并发）**：把要抓的多个 URL **一次性**传给 fetch.py 并发抓——`python3 .../scripts/fetch.py <url1> <url2> <url3>`（多 URL 时返回 JSON 数组，按输入顺序，并发数由 `fast_search.fetch_concurrency` 控，默认 5）。**不要**一条一条串行调（会慢几倍）。单条返回 `WEBFETCH_FALLBACK` 则对那条改用 WebFetch；某条被挡（blocked）不影响其余条
+4. **补抓缺正文的（并发）**：步骤 1 已带 `content` 的结果**不必再抓**，直接进步骤 5。只对**没拿到 content** 的结果（serper 回落、或个别 content 为空）才调 fetch.py，并把多个 URL **一次性**传入并发抓——`python3 .../scripts/fetch.py <url1> <url2>`（多 URL 返回 JSON 数组，按输入顺序，并发数由 `fast_search.fetch_concurrency` 控，默认 5）。**不要**一条条串行。单条 `WEBFETCH_FALLBACK` 则那条改用 WebFetch；某条被挡不影响其余条
 5. **写盘**：每条结果 → `<target_dir>/fast-search-NNN.md`，文件头部用 YAML front-matter 写关键词（专业术语 / 版本号 / 关键数字等）
 6. **写索引**：`<target_dir>/INDEX.md`，wiki 风格大纲（子文件简介、ranking、推荐与否、关键词清单、Next-Read 建议）
 7. **写 usage summary**：调 `python3 .../scripts/finalize_usage.py --subagent fast-search <run_root>`

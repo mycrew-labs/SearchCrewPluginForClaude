@@ -95,6 +95,11 @@ def main() -> int:
     )
     ap.add_argument("--tier", choices=["fast", "deep"], default=None, help="覆盖 model 档位（默认按 subagent 推断）")
     ap.add_argument("--model", default=None, help="显式覆盖 AI backend model（绕过 routing.yaml）")
+    ap.add_argument(
+        "--with-content",
+        action="store_true",
+        help="jina 搜索一次性带回每条结果正文（content 字段），省掉随后逐页 fetch；仅对 jina 生效",
+    )
     args = ap.parse_args()
 
     # --prefer ai 或 --ai-backend 显式指定 → 优先尝试 AI 综述层
@@ -133,7 +138,10 @@ def main() -> int:
     for backend in non_ai_order:
         try:
             if backend == "jina" and jina.is_available_search():
-                results = jina.search(args.query, max_results=args.max_results, language=args.language)
+                results = jina.search(
+                    args.query, max_results=args.max_results, language=args.language,
+                    include_content=args.with_content,
+                )
                 emit({"backend": "jina", "results": results, "fallback": None})
                 return 0
             if backend == "serper" and serper.is_available():
