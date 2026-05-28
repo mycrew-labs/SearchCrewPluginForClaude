@@ -172,8 +172,8 @@ class TestBatchFetch(unittest.TestCase):
         self.assertEqual(out[1]["fallback"], "WEBFETCH_FALLBACK")  # 坏的那条单独降级
         self.assertEqual(out[2]["source"], "raw")  # 其余不受影响
 
-    def test_concurrency_default_is_two(self):
-        self.assertEqual(fetch._fetch_concurrency(), 2)
+    def test_concurrency_default_is_five(self):
+        self.assertEqual(fetch._fetch_concurrency(), 5)
 
 
 if __name__ == "__main__":

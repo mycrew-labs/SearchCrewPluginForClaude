@@ -1,6 +1,6 @@
 {
   "name": "search-crew",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "分层调研系统：fast-search 通用快速、site-search 官方精确、deep-search 深度循环。底层 Jina/Serper + grok/gemini/doubao AI 综述 + 站点 API + Chrome DevTools MCP。",
   "author": {
     "name": "yubing",

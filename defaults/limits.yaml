@@ -8,9 +8,12 @@ last_updated: "2026-05-21"
 fast_search:
   max_results: 5         # 每次抓多少个搜索结果
   fetch_timeout_sec: 30  # 单次 fetch 超时
-  # fetch.py 多 URL 并发抓取的 worker 数。默认 2 = 贴 Jina 免费档「2 concurrent」上限
-  # （免费档瓶颈是并发数不是 RPM）。Paid 档可调 50、Premium 500。设 >2 在免费档会撞并发限吃 429。
-  fetch_concurrency: 2
+  # fetch.py 多 URL 并发抓取的 worker 数。默认 5。
+  # Jina Reader（r.jina.ai）速率：免费 key 500 RPM（≈8 req/s），并非主要瓶颈。
+  # 官方 FAQ 另有一句 platform-wide「Free 2 concurrent」，但口径笼统、未明确卡 Reader；
+  # 社区工具（jina-light-mcp 等）默认并发 5 跑得动，故这里取 5。
+  # 若频繁吃 429 可调低；Paid（50 concurrent）/ Premium（500）可调高。
+  fetch_concurrency: 5
 
 site_search:
   max_results: 10

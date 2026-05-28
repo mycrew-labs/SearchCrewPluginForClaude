@@ -35,7 +35,7 @@ model: claude-haiku-4-5-20251001
     - 正常 → 跳到步骤 3
     - 返回 `WEBSEARCH_FALLBACK` → 改用内置 WebSearch 工具（自带于 Claude Code）
 3. **挑结果排序**：按相关度 / 权威性 / 时效性给每条打 ranking（0-10），保留 top N（默认 5）
-4. **抓内容（并发）**：把要抓的多个 URL **一次性**传给 fetch.py 并发抓——`python3 .../scripts/fetch.py <url1> <url2> <url3>`（多 URL 时返回 JSON 数组，按输入顺序，并发数由 `fast_search.fetch_concurrency` 控，默认 2 贴 Jina 免费档并发上限）。**不要**一条一条串行调（会慢几倍）。单条返回 `WEBFETCH_FALLBACK` 则对那条改用 WebFetch；某条被挡（blocked）不影响其余条
+4. **抓内容（并发）**：把要抓的多个 URL **一次性**传给 fetch.py 并发抓——`python3 .../scripts/fetch.py <url1> <url2> <url3>`（多 URL 时返回 JSON 数组，按输入顺序，并发数由 `fast_search.fetch_concurrency` 控，默认 5）。**不要**一条一条串行调（会慢几倍）。单条返回 `WEBFETCH_FALLBACK` 则对那条改用 WebFetch；某条被挡（blocked）不影响其余条
 5. **写盘**：每条结果 → `<target_dir>/fast-search-NNN.md`，文件头部用 YAML front-matter 写关键词（专业术语 / 版本号 / 关键数字等）
 6. **写索引**：`<target_dir>/INDEX.md`，wiki 风格大纲（子文件简介、ranking、推荐与否、关键词清单、Next-Read 建议）
 7. **写 usage summary**：调 `python3 .../scripts/finalize_usage.py --subagent fast-search <run_root>`

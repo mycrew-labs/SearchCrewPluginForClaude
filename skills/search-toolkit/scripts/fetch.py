@@ -128,17 +128,18 @@ def _fetch_one(url: str) -> dict:
 
 
 def _fetch_concurrency() -> int:
-    """并发抓取的 worker 数。默认 2（贴 Jina 免费档「2 concurrent」上限）。
+    """并发抓取的 worker 数。默认 5。
 
-    Jina 速率限制按 API key 计：Free 2 并发 / Paid 50 / Premium 500。免费档并发是
-    瓶颈（非 RPM），设 >2 会撞并发限吃 429。Paid 用户可在 limits.yaml 调高。
+    Jina Reader（r.jina.ai）免费 key 500 RPM（≈8 req/s），并发非主要瓶颈；官方 FAQ
+    另有一句笼统的「Free 2 concurrent」但未明确卡 Reader，社区工具默认 5 可用，故取 5。
+    频繁 429 可在 limits.yaml 调低；Paid（50）/ Premium（500）可调高。
     """
     try:
         limits = config.load_limits() or {}
-        v = int((limits.get("fast_search") or {}).get("fetch_concurrency", 2))
+        v = int((limits.get("fast_search") or {}).get("fetch_concurrency", 5))
         return max(1, v)
     except Exception:
-        return 2
+        return 5
 
 
 def main() -> int:
