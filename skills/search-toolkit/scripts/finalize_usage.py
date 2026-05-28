@@ -203,7 +203,10 @@ def main() -> int:
         return 1
 
     if args.one_line:
-        agg = _aggregate(_load_records(run_root / "usage.jsonl"))
+        records = _load_records(run_root / "usage.jsonl")
+        if args.subagent:  # 切片：只统计本 subagent，避免会话级 run_root 把整会话累计进来
+            records = [r for r in records if r.get("subagent") == args.subagent]
+        agg = _aggregate(records)
         print(_render_one_line(agg))
         return 0
 

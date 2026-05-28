@@ -89,6 +89,23 @@ class TestFinalizeUsage(unittest.TestCase):
         self.assertIn("fast-search", text)
         self.assertIn("调用总数: 1", text)
 
+    def test_one_line_honors_subagent_filter(self) -> None:
+        """--one-line + --subagent 只统计该 subagent（会话级 run_root 不被整会话污染）。"""
+        self._write_usage(
+            [
+                {"ts": "2026-05-21T10:00:00Z", "run_id": "run-xxx", "subagent": "fast-search", "backend": "jina", "endpoint": "search", "status": 200, "latency_ms": 100, "cost_estimate_usd": 0.001, "pricing_source": "active"},
+                {"ts": "2026-05-21T10:00:01Z", "run_id": "run-xxx", "subagent": "deep-search", "backend": "grok", "endpoint": "responses", "status": 200, "latency_ms": 100, "cost_estimate_usd": 0.05, "pricing_source": "active"},
+                {"ts": "2026-05-21T10:00:02Z", "run_id": "run-xxx", "subagent": "deep-search", "backend": "jina", "endpoint": "search", "status": "call_cap_exceeded", "latency_ms": 0, "cost_estimate_usd": None, "pricing_source": "active"},
+            ]
+        )
+        whole = self._run(str(self.run_root), "--one-line").stdout
+        self.assertIn("2 次调用", whole)
+        self.assertIn("触发站点调用上限", whole)
+        sliced = self._run(str(self.run_root), "--subagent", "fast-search", "--one-line").stdout
+        self.assertIn("1 次调用", sliced)
+        self.assertIn("0.0010", sliced)
+        self.assertNotIn("触发站点调用上限", sliced)
+
 
 if __name__ == "__main__":
     unittest.main()

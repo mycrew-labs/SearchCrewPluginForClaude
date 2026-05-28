@@ -34,7 +34,7 @@ Read `<target_dir>/INDEX.md`，按需跳进具体 `fast-search-NNN.md`。
 ### 5. 最终回复用户
 
 - **核心结论**：用你自己的话综合，**必须**附证据 URL / 关键原文 / 关键数字，不编造
-- **cost 一行**：调 `python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/finalize_usage.py <run_root> --one-line` 拿现成字符串拼到末尾
+- **cost 一行**：调 `python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/finalize_usage.py <run_root> --subagent fast-search --one-line` 拿现成字符串拼到末尾。**MUST 带 `--subagent fast-search`**——run_root 是会话级共享目录，不切片会把整会话的累计调用都算进来（显示成上百次调用 / 一堆"触发上限"，吓人且不准）；切片后只显示本次 fast-search 的真实开销
 
 **不要**写出 `<run_root>` 路径或展开 cost 拆分。
 
