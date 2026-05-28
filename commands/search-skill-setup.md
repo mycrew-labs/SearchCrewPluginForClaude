@@ -25,15 +25,22 @@ python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/check_backends.py
 ls ~/.config/search-crew/ 2>&1 || echo "未初始化"
 ```
 
-- 如果不存在 / 缺关键文件 → 调种子拷贝：
+- 如果不存在 / 缺关键文件 → 调种子拷贝（首次 seed）：
   ```bash
   python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/seed_user_config.py
   ```
-- 如果 active 已存在但 plugin 升级带来新顶层段（例如 `ai_summary:` / `call_cap:`）→ 跑 merge：
+- 如果 active 已存在 → **先用 `--dry-run` 检测**是否缺新顶层段（plugin 升级常带来，如 `wide_search:`）：
   ```bash
-  python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/seed_user_config.py --merge
+  python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/seed_user_config.py --merge --dry-run
   ```
-  仅追加缺失的顶层段，用户已有内容一字不动。
+  - **有缺段**（stdout 输出 `<file>\t<缺的key>`）→ **MUST 先问用户**（用 AskUserQuestion，说明缺哪些段、补齐只追加不动已有内容），用户确认后 **由你（主 agent）自己执行**真正的 merge：
+    ```bash
+    python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/seed_user_config.py --merge --trigger setup
+    ```
+    执行后告知用户「已补齐 X 段，已记入 `~/.config/search-crew/changelog.log`」。
+  - **无缺段** → 静默，不打扰。
+  - **MUST NOT** 把 `seed_user_config.py --merge` 这条命令直接丢给用户在 `!` shell 里跑——交互 shell 里 `$CLAUDE_PLUGIN_ROOT` 可能为空会报错；脚本你来跑（脚本自身用 `__file__` 解析路径，不依赖该变量）。
+  - **MUST NOT** 用编辑器手改 `~/.config/search-crew/` 任何文件（charter I-LEARN-001）；补配置只能经 seed / merge / promote 这三个固定脚本操作。
 
 ### 3. 醒目展示 onboarding 备份提示（P-CONFIG-001）
 

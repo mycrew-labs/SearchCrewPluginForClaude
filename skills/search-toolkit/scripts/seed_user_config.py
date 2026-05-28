@@ -20,7 +20,8 @@ import pathlib
 import shutil
 import sys
 
-from lib import config
+from lib import changelog, config
+from lib.yaml_blocks import PREAMBLE_KEY, split_top_level_blocks
 
 
 def _plugin_root() -> pathlib.Path:
@@ -52,91 +53,65 @@ def _copy_if_not_exists(src: pathlib.Path, dst: pathlib.Path) -> int:
     return count
 
 
-_TOP_LEVEL_KEY = __import__("re").compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*:")
-
-
-def _split_top_level_blocks(text: str) -> dict[str, str]:
-    """把 YAML 文本按顶层 key 切块，返回 {key: 文本块（含尾部空行）}。
-
-    顶层 key 定义为「行首无缩进且包含冒号」的行。每个 block 含该行 + 所有缩进续行
-    + 之后的纯空行 / 注释行（直到下一个顶层 key）。
-
-    极简实现，足够 routing.yaml / limits.yaml / pricing.yaml 这类扁平 + 一层嵌套
-    的配置文件。
-    """
-    lines = text.splitlines(keepends=True)
-    blocks: dict[str, str] = {}
-    current_key: str | None = None
-    current_buf: list[str] = []
-    for line in lines:
-        is_top = bool(_TOP_LEVEL_KEY.match(line)) and line[0] not in (" ", "\t")
-        if is_top:
-            if current_key is not None:
-                blocks[current_key] = "".join(current_buf)
-            m = _TOP_LEVEL_KEY.match(line)
-            assert m is not None
-            current_key = m.group(1)
-            current_buf = [line]
-        else:
-            # 续行（缩进 / 空行 / 顶层注释）归到当前 block
-            if current_key is None:
-                # 文件开头的注释 / 空行 / metadata（如 last_updated）；用特殊 key "__preamble__"
-                blocks.setdefault("__preamble__", "")
-                blocks["__preamble__"] += line
-            else:
-                current_buf.append(line)
-    if current_key is not None:
-        blocks[current_key] = "".join(current_buf)
-    return blocks
+def _missing_top_level_keys(src_path: pathlib.Path, dst_path: pathlib.Path) -> list[str]:
+    """src 相对 dst 多出来的顶层 key（dst 缺失的段）。dst 不存在返回空（走普通 copy）。"""
+    if not dst_path.exists():
+        return []
+    src_blocks = split_top_level_blocks(src_path.read_text(encoding="utf-8"))
+    dst_blocks = split_top_level_blocks(dst_path.read_text(encoding="utf-8"))
+    return [k for k in src_blocks if k != PREAMBLE_KEY and k not in dst_blocks]
 
 
 def _merge_yaml_file(src_path: pathlib.Path, dst_path: pathlib.Path) -> list[str]:
     """把 src 里 dst 缺失的顶层 key 块追加到 dst 末尾。
 
-    返回追加的 key 列表（用于日志）。dst 中已有的 key 一字不动；preamble（顶部
-    注释 / metadata）一字不动。
+    返回追加的 key 列表。dst 中已有的 key 一字不动；preamble 一字不动。
     """
-    if not dst_path.exists():
-        return []  # 完全缺失走普通 copy，不算 merge
-    src_text = src_path.read_text(encoding="utf-8")
+    appended = _missing_top_level_keys(src_path, dst_path)
+    if not appended:
+        return []
+    src_blocks = split_top_level_blocks(src_path.read_text(encoding="utf-8"))
     dst_text = dst_path.read_text(encoding="utf-8")
-    src_blocks = _split_top_level_blocks(src_text)
-    dst_blocks = _split_top_level_blocks(dst_text)
-
-    appended: list[str] = []
-    suffix_chunks: list[str] = []
-    for key in src_blocks:
-        if key == "__preamble__":
-            continue
-        if key in dst_blocks:
-            continue
-        appended.append(key)
-        suffix_chunks.append(src_blocks[key])
-
-    if appended:
-        new_text = dst_text
-        if not new_text.endswith("\n"):
-            new_text += "\n"
-        new_text += "\n# ---- 以下段由 seed_user_config.py --merge 从 plugin defaults 补齐 ----\n"
-        new_text += "".join(suffix_chunks)
-        dst_path.write_text(new_text, encoding="utf-8")
+    new_text = dst_text if dst_text.endswith("\n") else dst_text + "\n"
+    new_text += "\n# ---- 以下段由 seed_user_config.py --merge 从 plugin defaults 补齐 ----\n"
+    new_text += "".join(src_blocks[k] for k in appended)
+    dst_path.write_text(new_text, encoding="utf-8")
     return appended
 
 
-def _do_merge() -> int:
-    """扫 defaults/*.yaml，对每个 active 已存在的同名文件做顶层 key merge。"""
+def _do_merge(dry_run: bool = False, trigger: str = "manual") -> int:
+    """扫 defaults/*.yaml，对每个 active 已存在的同名文件做顶层 key merge。
+
+    dry_run=True 时只检测缺失段、不写盘、不记 changelog，stdout 输出机器可读结果。
+    """
     src_dir = _defaults_dir()
     dst_dir = config.active_dir()
     if not dst_dir.exists():
         print(f"[seed --merge] active 不存在 {dst_dir}，请先跑普通 seed", file=sys.stderr)
         return 1
+
+    if dry_run:
+        any_missing = False
+        for src in sorted(src_dir.glob("*.yaml")):
+            missing = _missing_top_level_keys(src, dst_dir / src.name)
+            if missing:
+                any_missing = True
+                # 机器可读：每行 "<file>\t<key1,key2>"
+                print(f"{src.name}\t{','.join(missing)}")
+        if not any_missing:
+            print("[seed --merge --dry-run] 所有 active YAML 已与 defaults 同步", file=sys.stderr)
+        return 0
+
     any_change = False
-    for src in src_dir.glob("*.yaml"):
+    for src in sorted(src_dir.glob("*.yaml")):
         dst = dst_dir / src.name
         added = _merge_yaml_file(src, dst)
         if added:
             any_change = True
             print(f"[seed --merge] {dst.name} 补齐 {len(added)} 段：{', '.join(added)}", file=sys.stderr)
+            changelog.append_changelog(
+                "merge", dst.name, "+" + " +".join(added), trigger=trigger
+            )
         else:
             print(f"[seed --merge] {dst.name} 无需补齐", file=sys.stderr)
     if not any_change:
@@ -151,10 +126,20 @@ def main() -> int:
         action="store_true",
         help="为已存在的 active YAML 补齐 defaults 中新增的顶层段（用户已有段一字不动）",
     )
+    ap.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="配合 --merge：只检测 active 缺哪些顶层段、不写盘（stdout 输出 '<file>\\t<keys>'）",
+    )
+    ap.add_argument(
+        "--trigger",
+        default="manual",
+        help="标注本次写入的触发来源，写进 changelog（如 setup / first-install）",
+    )
     args = ap.parse_args()
 
     if args.merge:
-        return _do_merge()
+        return _do_merge(dry_run=args.dry_run, trigger=args.trigger)
 
     src = _defaults_dir()
     if not src.exists():
@@ -176,6 +161,9 @@ def main() -> int:
 
     # 标记完成
     (dst / ".seeded").touch()
+    if new_count:
+        trigger = args.trigger if args.trigger != "manual" else "first-install"
+        changelog.append_changelog("seed", "(init)", f"{new_count} files", trigger=trigger)
     return 0
 
 

@@ -24,7 +24,7 @@
 | **I-EVIDENCE-001** | 主 agent / subagent 向用户呈现任何来自搜索的结论时，**必须**附带循证证据：URL 必填，关键原文 / 数字按需 |
 | **I-PARALLEL-001** | 同 turn 内派发多个 subagent 必须一次性发起；派发前必须先调 `TaskCreate` |
 | **I-CONTEXT-001** | 给用户展示的 cost 总览**只一行**进 context；明细 / 历史走落盘文件或 `!` shell 命令，不污染主 agent context |
-| **I-LEARN-001** | AI **永不**直接修改 active 配置；要建议改动必须写到 `~/.config/search-crew/pending/`，由用户审核晋升 |
+| **I-LEARN-001** | AI **MUST NOT** 用编辑器手改 active 配置任何文件。AI 自发的建议（学到的路由 / 适配器）必须写 `pending/` 由用户审核晋升；用户**显式授权**下的维护（补 defaults 段、晋升 pending）只能经约定好的固定脚本操作（`seed` / `merge` / `promote`）完成，每次写入追加 changelog |
 | **I-BRAND-001** | 品牌归属 MyCrew；GitHub org `mycrew-labs`；Docker Hub namespace `mycrew` |
 | **I-FALLBACK-001** | plugin 在零 API key 状态下必须仍能完成基本调研（fallback 到 Claude Code 内置 WebSearch / WebFetch） |
 

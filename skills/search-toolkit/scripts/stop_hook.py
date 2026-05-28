@@ -44,8 +44,9 @@ def main() -> int:
         for p in pending["adapters"][:5]:
             lines.append(f"  · {p.name}")
     lines.append("")
-    lines.append("是否要：1) 晋升为长期规则（合并进 active）  2) 丢弃  3) 暂留下次再问？")
-    lines.append("（直接告诉我选哪个；如果想自己看，文件在 ~/.config/search-crew/pending/）")
+    lines.append("是否要：1) 晋升为长期规则  2) 丢弃  3) 暂留下次再问？")
+    lines.append("（选「晋升」时由 AI 跑 promote.py 把它合并进 active 并记 changelog，不手改；")
+    lines.append("  想自己看，文件在 ~/.config/search-crew/pending/）")
 
     print("\n".join(lines))
     return 0

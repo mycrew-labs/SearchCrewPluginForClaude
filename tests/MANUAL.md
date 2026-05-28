@@ -202,3 +202,30 @@ echo "site: fake.com" > ~/.config/search-crew/pending/routing/fake-rule.yaml
 **做**：`/search-fast 当前最流行的开源向量数据库`
 
 **期**：主 agent 派一个 fast-search subagent 做单轮调研并回带证据的结论 + 一行 cost；语义自动触发的老路径（不打命令、通用查询语气）仍照常工作。
+
+## TC-CFG-MUT-001 ：setup 检测缺段 → 问 → AI 自己 merge
+
+**做**：删掉 active 某 yaml 的一个顶层段（模拟 plugin 升级落后），跑 `/search-skill-setup`。
+
+**期**：
+
+- setup 用 `--merge --dry-run` 报出缺哪些段
+- 先用 AskUserQuestion 问你是否补齐（不直接补）
+- 你确认后，**AI 自己**跑 `--merge --trigger setup`（不是丢给你一条 `$CLAUDE_PLUGIN_ROOT` 命令）
+- 补齐后告知 `changelog.log` 已记一条
+
+## TC-CFG-MUT-002 ：pending 晋升经 promote 脚本
+
+**做**：在 `~/.config/search-crew/pending/routing/` 放一条候选（`- name: ...` 的 topics 项），对 AI 说「晋升它」。
+
+**期**：
+
+- AI 跑 `promote.py <file>`，把该 topic 合并进 `routing.yaml` 的 `topics:`（2 空格缩进），删除 pending 文件
+- **不**用编辑器手改 routing.yaml
+- `changelog.log` 追加 `promote routing.yaml +topic:<name> trigger=user-approved`
+
+## TC-CFG-MUT-003 ：changelog 三类记录可见
+
+**做**：依次触发首次 seed、一次 merge 补段、一次 promote 后，`cat ~/.config/search-crew/changelog.log`。
+
+**期**：三行分别含 `seed (init) ... trigger=first-install`、`merge <file> +<seg> trigger=setup`、`promote routing.yaml +topic:<name> trigger=user-approved`，每行带 UTC 时间戳，且文件只追加不重写。

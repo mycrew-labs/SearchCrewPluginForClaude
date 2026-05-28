@@ -196,3 +196,18 @@ def search(query: str, max_results: int = 10, **_: Any) -> list[dict[str, Any]]:
 6. `openspec/changes/<change-id>/capabilities/<name>/spec.md`：能力 spec
 
 参考已有的 `init-search-crew` / `add-usage-tracking` 两个 change 的目录结构。
+
+## 配置写入与 `$CLAUDE_PLUGIN_ROOT` 的坑
+
+`~/.config/search-crew/` 的写入只走三个固定脚本操作（见 charter `I-LEARN-001`）：
+
+- `seed_user_config.py`（首次拷 defaults）
+- `seed_user_config.py --merge`（补缺失顶层段；`--dry-run` 只检测不写）
+- `promote.py <pending-file>`（pending → active 晋升）
+
+三者都会向 `~/.config/search-crew/changelog.log` 追加一条记录。**AI / LLM 禁止用编辑器手改 active 任何文件**——要补配置就跑这些脚本，不要 Edit。
+
+**坑**：`$CLAUDE_PLUGIN_ROOT` 只在 plugin 自己的 command / agent 执行时被注入；在用户的交互 `!` shell 里它**是空的**，`python3 $CLAUDE_PLUGIN_ROOT/.../seed_user_config.py` 会解析成 `/.../` 直接报「文件不存在」。所以：
+
+- **别把依赖 `$CLAUDE_PLUGIN_ROOT` 的命令丢给用户手敲**；该由主 agent（command 上下文里有该变量）自己跑，或写绝对路径。
+- 上述脚本本身用 `__file__` 自解析 plugin 路径，**不依赖**该变量——直接给脚本绝对路径就能跑。
