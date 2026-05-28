@@ -17,6 +17,7 @@ import argparse
 import fcntl
 import os
 import pathlib
+import re
 import shutil
 import sys
 
@@ -119,8 +120,45 @@ def _do_merge(dry_run: bool = False, trigger: str = "manual") -> int:
     return 0
 
 
+_VALID_FAST_DEFAULT = ("auto", "grok", "gemini", "doubao")
+
+
+def _set_fast_default(value: str, trigger: str = "setup") -> int:
+    """seed 期初始化配置：写 active routing.yaml 的 ai_summary.fast_default（不手改、走脚本）。"""
+    if value not in _VALID_FAST_DEFAULT:
+        print(f"[set-fast-default] 非法值 '{value}'，须是 {_VALID_FAST_DEFAULT}", file=sys.stderr)
+        return 1
+    routing = config.active_dir() / "routing.yaml"
+    if not routing.exists():
+        print(f"[set-fast-default] routing.yaml 不存在：{routing}（请先 seed）", file=sys.stderr)
+        return 1
+    blocks = split_top_level_blocks(routing.read_text(encoding="utf-8"))
+    if "ai_summary" not in blocks:
+        print("[set-fast-default] routing.yaml 缺 ai_summary 段", file=sys.stderr)
+        return 1
+    lines = blocks["ai_summary"].splitlines(keepends=True)
+    new_line = f"  fast_default: {value}\n"
+    for i, ln in enumerate(lines):
+        if re.match(r"^\s{2}fast_default:\s*", ln):
+            lines[i] = new_line
+            break
+    else:
+        lines.insert(1, new_line)  # 紧跟 `ai_summary:` 头一行后插入
+    blocks["ai_summary"] = "".join(lines)
+    routing.write_text("".join(blocks.values()), encoding="utf-8")
+    changelog.append_changelog("set-fast-default", "routing.yaml", f"ai_summary.fast_default={value}", trigger=trigger)
+    print(f"[set-fast-default] ai_summary.fast_default = {value}", file=sys.stderr)
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Search Crew seed_user_config")
+    ap.add_argument(
+        "--set-fast-default",
+        choices=list(_VALID_FAST_DEFAULT),
+        default=None,
+        help="seed 期初始化配置：设 /search-fast 默认引擎（写 ai_summary.fast_default）",
+    )
     ap.add_argument(
         "--merge",
         action="store_true",
@@ -137,6 +175,10 @@ def main() -> int:
         help="标注本次写入的触发来源，写进 changelog（如 setup / first-install）",
     )
     args = ap.parse_args()
+
+    if args.set_fast_default:
+        trigger = args.trigger if args.trigger != "manual" else "setup"
+        return _set_fast_default(args.set_fast_default, trigger=trigger)
 
     if args.merge:
         return _do_merge(dry_run=args.dry_run, trigger=args.trigger)

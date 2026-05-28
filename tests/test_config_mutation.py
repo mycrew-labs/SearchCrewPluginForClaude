@@ -166,5 +166,27 @@ class TestPromote(_Base):
         )
 
 
+class TestSetFastDefault(_Base):
+    def _routing(self) -> str:
+        return (self.active / "routing.yaml").read_text(encoding="utf-8")
+
+    def test_set_and_change(self):
+        self._seed()
+        r = self._run(str(SEED), "--set-fast-default", "gemini")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("fast_default: gemini", self._routing())
+        # 幂等改值：再设 doubao 应替换而非新增第二行
+        self._run(str(SEED), "--set-fast-default", "doubao")
+        txt = self._routing()
+        self.assertIn("fast_default: doubao", txt)
+        self.assertEqual(txt.count("fast_default:"), 1)
+        self.assertIn("set-fast-default", self._changelog())
+
+    def test_invalid_value_rejected(self):
+        self._seed()
+        r = self._run(str(SEED), "--set-fast-default", "bing")  # 非法
+        self.assertNotEqual(r.returncode, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

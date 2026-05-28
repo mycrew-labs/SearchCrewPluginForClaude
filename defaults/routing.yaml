@@ -30,6 +30,9 @@ last_updated: "2026-05-22"
 #   - gemini（Google）：gemini-2.5-flash-lite / gemini-3.5-flash 等
 ai_summary:
   enabled: true
+  # /search-fast 快答默认引擎：auto = 按语言/语境选（中文偏 doubao、英文偏 selection_order）；
+  # 填 grok / gemini / doubao = 中英文都固定用这家（无视语言）。可在 /search-skill-setup 里选。
+  fast_default: auto
   selection_order:
     - grok
     - doubao

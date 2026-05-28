@@ -53,6 +53,32 @@ class TestAiSearch(unittest.TestCase):
         self.assertEqual(out["fallback"], "WEBSEARCH_FALLBACK")
 
 
+class TestFastDefault(unittest.TestCase):
+    def _avail(self, *names):
+        mods = {}
+        for n in ("grok", "gemini", "doubao"):
+            m = mock.Mock(); m.is_available.return_value = (n in names); mods[n] = m
+        return mods
+
+    def test_fast_default_forces_backend(self):
+        with mock.patch.object(ai_search.ai_summary, "ai_summary_cfg", return_value={"fast_default": "gemini"}):
+            with mock.patch.dict(ai_search.ai_summary.AI_BACKEND_MODULES, self._avail("grok", "gemini", "doubao")):
+                # 中文 query 也应被 fast_default 强制成 gemini
+                self.assertEqual(ai_search._lang_preferred_backend("国产新能源车"), "gemini")
+
+    def test_auto_falls_to_language(self):
+        with mock.patch.object(ai_search.ai_summary, "ai_summary_cfg", return_value={"fast_default": "auto"}):
+            with mock.patch.dict(ai_search.ai_summary.AI_BACKEND_MODULES, self._avail("grok", "gemini", "doubao")):
+                self.assertEqual(ai_search._lang_preferred_backend("国产新能源车"), "doubao")  # 中文→doubao
+                self.assertIsNone(ai_search._lang_preferred_backend("open source db"))  # 英文→交 selection_order
+
+    def test_fast_default_unavailable_falls_back(self):
+        with mock.patch.object(ai_search.ai_summary, "ai_summary_cfg", return_value={"fast_default": "gemini"}):
+            with mock.patch.dict(ai_search.ai_summary.AI_BACKEND_MODULES, self._avail("doubao")):  # gemini 不可用
+                self.assertEqual(ai_search._lang_preferred_backend("国产新能源车"), "doubao")  # 回落语言
+                self.assertIsNone(ai_search._lang_preferred_backend("open source db"))
+
+
 class TestRenderCitations(unittest.TestCase):
     def test_with_offsets_inserts_footnotes(self):
         summary = "PostgreSQL 很强。Redis 很快。"

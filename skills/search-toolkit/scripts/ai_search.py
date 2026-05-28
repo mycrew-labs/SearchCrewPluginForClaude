@@ -72,7 +72,16 @@ def _render_citations(summary: str, citations: list) -> tuple[str, list, bool]:
 
 
 def _lang_preferred_backend(query: str) -> str | None:
-    """语言/语境偏好：中文 query 优先 doubao（若可用）；否则交回默认 selection_order。"""
+    """选 AI 源：先看 fast_default 固定项，否则按语言（中文优先 doubao），再否则交默认 selection_order。
+
+    - `ai_summary.fast_default` 为具体家（grok/gemini/doubao）且可用 → 强制用它（无视语言）。
+    - `auto` / 缺失 / 该家不可用 → 中文 query 优先 doubao；其余交回 selection_order。
+    """
+    fd = (ai_summary.ai_summary_cfg().get("fast_default") or "auto").lower()
+    if fd in ai_summary.AI_BACKEND_MODULES:
+        mod = ai_summary.AI_BACKEND_MODULES.get(fd)
+        if mod and mod.is_available():
+            return fd
     if _CJK_RE.search(query):
         mod = ai_summary.AI_BACKEND_MODULES.get("doubao")
         if mod and mod.is_available():

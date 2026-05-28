@@ -21,10 +21,10 @@
 - **THEN** `~/.config/search-crew/routing.yaml` 不被覆盖；用户想要新主题需要主动去 plugin 仓库 cd 查看再手动合并
 
 ### Requirement: 首次安装拷贝 defaults，幂等
-plugin 安装时 `seed_user_config.py` MUST 把 `defaults/` 整个拷到 `~/.config/search-crew/`。**幂等**：已存在的子文件 MUST NOT 覆盖。运行时入口检测到 active 目录不存在时 MUST 兜底再跑一次 seed（带文件锁防并发）。
+plugin 安装时 `seed_user_config.py` MUST 把 `defaults/` 整个拷到 `~/.config/search-crew/`。**幂等**：已存在的子文件 MUST NOT 覆盖。运行时入口检测到 active 目录不存在时 MUST 兜底再跑一次 seed（带文件锁防并发）。seed 操作除拷 defaults 外，也负责写入**初始化期用户选择的配置项**（如 `ai_summary.fast_default`）——经 `seed_user_config.py --set-fast-default <值>` 子模式写入对应字段并记 changelog；这仍属 seed 这一个固定写入操作，不新增第四个操作（沿 I-LEARN-001 的固定脚本写入约束）。
 
 **Lock**: user-confirmed
-**Confirmed-At**: 2026-05-21
+**Confirmed-At**: 2026-05-29
 
 #### Scenario: 首次 seed
 - **WHEN** plugin 第一次安装，`~/.config/search-crew/` 不存在
@@ -37,6 +37,10 @@ plugin 安装时 `seed_user_config.py` MUST 把 `defaults/` 整个拷到 `~/.con
 #### Scenario: 运行时兜底 seed
 - **WHEN** 某 subagent 运行时发现 active 目录不存在（用户手动删了）
 - **THEN** subagent 入口自动调 `seed_user_config.py` 重建，再继续
+
+#### Scenario: 初始化期写用户选择的引擎
+- **WHEN** 用户在 setup 选了快答默认引擎（如 gemini），主 agent 跑 `seed_user_config.py --set-fast-default gemini`
+- **THEN** active `routing.yaml` 的 `ai_summary.fast_default` 被设为 `gemini`，changelog 追加一条；用户已有其它内容不动
 
 ### Requirement: Pending 学习区 + Stop hook 提示
 Stop hook 在主 agent 工作告一段落时 MUST 扫描 `~/.config/search-crew/pending/`，发现非空时输出简洁提示给用户，询问三选一：晋升 / 丢弃 / 暂留。用户全程**无需记任何命令**——交互入口在 Stop hook 自动提示里。
