@@ -246,3 +246,21 @@ echo "site: fake.com" > ~/.config/search-crew/pending/routing/fake-rule.yaml
 **做**：连续跑两次 `/search-fast`，看各自 cost 行。
 
 **期**：两次落不同 run 目录，cost 各自独立（第二次不把第一次的调用累计进来）。
+
+## TC-SPLIT-001 ：/search-fast = AI 综述快答，无 subagent
+
+**做**：`/search-fast 当前最流行的开源向量数据库`
+
+**期**：主 agent **直接跑 `ai_search.py`**（不派任何 subagent），秒级返回一段 AI 综述 + 引用 URL + 一行 cost；产物里没有 `evidence-search-NNN.md` 那类结构化文件。
+
+## TC-SPLIT-002 ：evidence-search 中英双语并发（deep 内部）
+
+**做**：`/search-deep <一个中英文资料都丰富的题>`，看 deep 派出的 worker。
+
+**期**：deep 派的是 **evidence-search**（非 fast-search）；evidence-search 同 turn 并发跑 serper(英文版) + bocha(中文版)，merge 去重；serper 失败才回落 jina；产物落 `<run_root>/evidence-search/`。
+
+## TC-SPLIT-003 ：deep/wide 改派 evidence-search
+
+**做**：分别跑 `/search-deep` 与 `/search-wide`。
+
+**期**：两者派的 worker subagent 都是 `evidence-search`（SEARCH_CREW_SUBAGENT=evidence-search、产物前缀 evidence-search-），不再出现 fast-search。

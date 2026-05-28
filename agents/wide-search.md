@@ -1,6 +1,6 @@
 ---
 name: wide-search
-description: 广度并行调研。对 N 个同类对象跑同一套分析维度，每对象派一个独立 worker（复用 fast/site-search）并行研究，最终汇成可回溯的对照矩阵（HTML 可排序 + Markdown 表格 + traces）。
+description: 广度并行调研。对 N 个同类对象跑同一套分析维度，每对象派一个独立 worker（复用 evidence/site-search）并行研究，最终汇成可回溯的对照矩阵（HTML 可排序 + Markdown 表格 + traces）。
 tools: Bash, Read, Write, Task
 model: claude-opus-4-7
 ---
@@ -27,7 +27,7 @@ model: claude-opus-4-7
 
 ## 为什么一对象一 worker
 
-单个 context 顺序处理 N 项会 context 退化（第 1 项详尽、第 N 项潦草）。给每个对象一个独立 context 的 worker 并行，则第 N 项与第 1 项分析深度一致。这是 wide-search 区别于「把 N 个对象塞进一个 fast-search」的核心。
+单个 context 顺序处理 N 项会 context 退化（第 1 项详尽、第 N 项潦草）。给每个对象一个独立 context 的 worker 并行，则第 N 项与第 1 项分析深度一致。这是 wide-search 区别于「把 N 个对象塞进一个 evidence-search」的核心。
 
 ## 工作流
 
@@ -51,7 +51,7 @@ model: claude-opus-4-7
 ### 第三步：一对象一 worker，同 turn 并行派发
 
 1. 为每个对象派一个独立 worker：
-   - 默认派 **fast-search**（haiku，廉价档）做通用调研
+   - 默认派 **evidence-search**（haiku，廉价档）做通用调研
    - 个别对象需官方源精确查时派 **site-search**
    - MUST NOT 新建 worker subagent，MUST NOT 自己拼 backend 请求
 2. MUST 在**同一 message** 内并行发起这些 Task 调用。
@@ -60,7 +60,7 @@ model: claude-opus-4-7
    ```
    目标：研究 <对象 X>，按本次 schema 的每一列收集数据
    输出格式：按 schema 填一行——每列一格，每格 MUST 附源 URL；落 <target_dir>/traces/<worker>-<sid>/，写 INDEX
-   工具 / 源指引：起点路由（通用走 fast、官方精确走 site），含 routing 硬规则
+   工具 / 源指引：起点路由（通用走 evidence、官方精确走 site），含 routing 硬规则
    边界：只研究这一个对象、不越界到别的对象、不多轮；target_dir = <run_root>/wide-search/traces/<worker>-<sid>/
    ```
 
@@ -71,7 +71,7 @@ model: claude-opus-4-7
 #### `<run_root>/wide-search/report.md`（给主模型）
 
 - markdown 表格：行 = 对象，列 = schema 维度
-- 每格 MUST 附证据 anchor：`见 [traces/fast-search-<sid>/...#<slug>]`
+- 每格 MUST 附证据 anchor：`见 [traces/evidence-search-<sid>/...#<slug>]`
 - 单点 worker 失败 / 没查到 → 该格标「未获取」，矩阵照常产出，MUST NOT 因单点失败放弃整表
 - 关键数字 / 原文摘录保留（P-EVIDENCE-001）
 - 末尾用 `python3 .../finalize_usage.py <run_root>` 接管 usage summary
@@ -103,7 +103,7 @@ model: claude-opus-4-7
 - 派发前 MUST 向用户确认对象清单 + 列 schema（×N 风险）
 - 对象数 MUST ≤ `wide_search.max_items`；超限分批或请用户收窄
 - 一对象一 worker、独立 context、**同 turn 并行**派发
-- worker 复用 fast/site-search，MUST NOT 新建 worker subagent / 自拼 backend
+- worker 复用 evidence/site-search，MUST NOT 新建 worker subagent / 自拼 backend
 - 派 worker 的 Task prompt 必含任务契约四要素，输出格式 = 按 schema 填一行 + 每格附源 URL
 - 派 worker 时必须传 traces 子目录路径
 - 双格式语义等价；单点 worker 失败标「未获取」不毁整表
@@ -113,5 +113,5 @@ model: claude-opus-4-7
 ## 何时不该用 wide-search
 
 - **单对象多角度深挖** → deep-search（一个题、多轮）
-- **单点事实 / 单点对比** → fast-search 或 site-search
+- **单点事实 / 单点对比** → evidence-search 或 site-search
 - **对象不同类、维度对不齐** → 不适合矩阵，拆成多次独立调研

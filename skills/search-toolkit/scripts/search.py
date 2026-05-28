@@ -20,65 +20,15 @@ from __future__ import annotations
 import argparse
 import sys
 
-from lib import BackendError, emit, config, jina, serper, bocha, runtime
-from lib.backends import ai_grok, ai_gemini, ai_doubao
+from lib import BackendError, emit, jina, serper, bocha
+from lib import ai_summary
 
-AI_BACKEND_MODULES = {
-    "grok": ai_grok,
-    "gemini": ai_gemini,
-    "doubao": ai_doubao,
-}
-_DEFAULT_SELECTION_ORDER = ["grok", "doubao", "gemini"]
-
-
-def _ai_summary_cfg() -> dict:
-    routing = config.load_routing() or {}
-    return routing.get("ai_summary") or {}
-
-
-def _pick_ai_backend(explicit: str | None) -> str | None:
-    """按 selection_order + 可用性挑一个 AI backend。返回 backend 名或 None。"""
-    if explicit:
-        mod = AI_BACKEND_MODULES.get(explicit)
-        return explicit if mod and mod.is_available() else None
-
-    cfg = _ai_summary_cfg()
-    if not cfg.get("enabled", True):
-        return None
-    order = cfg.get("selection_order") or _DEFAULT_SELECTION_ORDER
-    for name in order:
-        mod = AI_BACKEND_MODULES.get(name)
-        if mod and mod.is_available():
-            return name
-    return None
-
-
-def _resolve_tier(explicit: str | None) -> str:
-    """tier 来源：--tier 显式 > subagent 名（含 'fast' → fast）> deep。"""
-    if explicit:
-        return explicit
-    sub = (runtime.current_subagent() or "").lower()
-    return "fast" if "fast" in sub else "deep"
-
-
-def _resolve_model(backend_name: str, tier: str, explicit_model: str | None) -> str | None:
-    """model 来源：--model 显式 > routing.yaml ai_summary.models.<backend>.<tier> > 同 backend 另一档。"""
-    if explicit_model:
-        return explicit_model
-    models = (_ai_summary_cfg().get("models") or {}).get(backend_name) or {}
-    return models.get(tier) or models.get("deep") or models.get("fast")
-
-
-def _run_ai(backend_name: str, query: str, max_results: int, model: str | None) -> dict:
-    mod = AI_BACKEND_MODULES[backend_name]
-    envelope = mod.search(query, max_results=max_results, model=model)
-    return {
-        "backend": envelope["backend"],
-        "summary": envelope.get("summary", ""),
-        "citations": envelope.get("citations", []),
-        "results": envelope.get("results", []),
-        "fallback": None,
-    }
+# AI 综述选源 / model 解析 / 调用逻辑已抽到 lib/ai_summary.py，与 ai_search.py 共用
+_ai_summary_cfg = ai_summary.ai_summary_cfg
+_pick_ai_backend = ai_summary.pick_backend
+_resolve_tier = ai_summary.resolve_tier
+_resolve_model = ai_summary.resolve_model
+_run_ai = ai_summary.run_ai
 
 
 def main() -> int:

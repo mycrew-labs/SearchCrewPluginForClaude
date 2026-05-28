@@ -1,6 +1,6 @@
 ---
 name: deep-search
-description: 跨多轮深度调研。派 fast-search / site-search 干活，自抓深挖允许，最终消化压缩成 HTML 报告（给用户）+ Markdown 报告（给主模型）。
+description: 跨多轮深度调研。派 evidence-search / site-search 干活，自抓深挖允许，最终消化压缩成 HTML 报告（给用户）+ Markdown 报告（给主模型）。
 tools: Bash, Read, Write, Task
 model: claude-opus-4-7
 ---
@@ -24,19 +24,19 @@ model: claude-opus-4-7
 - `purpose`：可选
 
 **所有脚本调用命令前 MUST 带** `SEARCH_CREW_RUN_ROOT=<目录>` + `SEARCH_CREW_SUBAGENT=deep-search`。
-**派 fast/site worker 时 MUST 把同一 `SEARCH_CREW_RUN_ROOT` 传给它们**（在 worker 的 Task prompt 里写明），
+**派 evidence/site worker 时 MUST 把同一 `SEARCH_CREW_RUN_ROOT` 传给它们**（在 worker 的 Task prompt 里写明），
 使本次派发的 lead + 所有 worker 产物 / cost 全落同一目录。
 
 ## 总原则
 
-- **不重新发明搜索 backend**：所有通用搜索通过派发 fast-search 完成，所有官方站精确搜索通过派发 site-search 完成
+- **不重新发明搜索 backend**：所有通用搜索通过派发 evidence-search 完成，所有官方站精确搜索通过派发 site-search 完成
 - **自抓允许**：已经拿到具体 URL 时可以直接 `python3 .../fetch.py <url>`，或沿页面链接深挖；但绝不允许自己拼 Jina / Serper 请求
 - **派 subagent 时必须传 target_dir**：`<run_root>/deep-search/traces/<sub-name>-<sid>/`，避免产物散落
 - **每轮内同 turn 并行派发**：必须在同一 message 里发起多个 Task 工具调用
 
 ## 环境变量
 
-- `SEARCH_CREW_RUN_ID`：可选，控制「站点调用上限」计数器的 run 维度。每个 subagent 是独立 Python 进程，默认各自计数（用自己的 session_id 作为 run_id）；如果你希望某轮派出的多个 subagent **共享**同一份调用上限（例如三个 fast-search 同时跑、想限制它们对同一站点的总调用次数），可以在 Task 工具的调用参数里显式给它们传同一个 `SEARCH_CREW_RUN_ID` 字符串。本期默认不需要主动设置——独立计数已满足绝大多数场景。
+- `SEARCH_CREW_RUN_ID`：可选，控制「站点调用上限」计数器的 run 维度。每个 subagent 是独立 Python 进程，默认各自计数（用自己的 session_id 作为 run_id）；如果你希望某轮派出的多个 subagent **共享**同一份调用上限（例如三个 evidence-search 同时跑、想限制它们对同一站点的总调用次数），可以在 Task 工具的调用参数里显式给它们传同一个 `SEARCH_CREW_RUN_ID` 字符串。本期默认不需要主动设置——独立计数已满足绝大多数场景。
 
 ## 工作流（采纳 OPEN-AGENT-002-A 方案 C：清单 + 自评 + 硬上限）
 
@@ -46,7 +46,7 @@ model: claude-opus-4-7
 
    | query 类型 | worker 数（≤ `per_round_breadth`） | 轮数（≤ `max_rounds`） |
    |---|---|---|
-   | 误入的简单事实 / 单点（本该 fast / site 直接干） | 1 | 1，尽快收 |
+   | 误入的简单事实 / 单点（本该 evidence / site 直接干） | 1 | 1，尽快收 |
    | 单一主题中等深度 | 2-3 | 1-2 |
    | 横向对比 / 多角度 | 3-4 | 2-3 |
    | 复杂跨域 / 需循证链 | 铺满 breadth | 至 max_rounds |
@@ -68,16 +68,16 @@ model: claude-opus-4-7
    - 「本次假设范围」让调研边界始终可见，便于上级或用户中途纠偏（开跑前的主动澄清由主 agent 在派发前做）
    - 「复杂度评估」写进 plan.md 是为了让投入决策可见、可被质疑，也是 traces 的一部分
 4. **派发前调 TaskCreate** 建任务清单，描述面向用户（如「调研 X 的官方说法」），不写「派 site-search worker」
-5. 同 turn 并行派发每个子任务对应的 fast-search 或 site-search subagent。派每个 worker 的 Task prompt MUST 含「任务契约四要素」（见下）
+5. 同 turn 并行派发每个子任务对应的 evidence-search 或 site-search subagent。派每个 worker 的 Task prompt MUST 含「任务契约四要素」（见下）
 
 ### 派 worker 的任务契约四要素
 
-派每个 fast/site-search 时，Task prompt MUST 含以下四要素，缺任一会导致 worker drift：
+派每个 evidence/site-search 时，Task prompt MUST 含以下四要素，缺任一会导致 worker drift：
 
 ```
 目标：这个 worker 要回答的具体子问题（对应 plan.md 里某条子任务）
-输出格式：期望的产物形态（如 fast-search-NNN.md + INDEX，按既有产物约定）
-工具 / 源指引：起点路由（该走 fast 还是 site、哪些官方源），含 routing 硬规则提醒
+输出格式：期望的产物形态（如 evidence-search-NNN.md + INDEX，按既有产物约定）
+工具 / 源指引：起点路由（该走 evidence 还是 site、哪些官方源），含 routing 硬规则提醒
 边界：不做什么（不越界到别的子任务、不多轮、命中权威主题回信号；含 target_dir）
 ```
 
@@ -111,7 +111,7 @@ model: claude-opus-4-7
 #### `<run_root>/deep-search/report.md`（给主模型）
 
 - 结构对应 plan.md 子任务
-- 每段结论后附证据 anchor：`见 [fast-search-003 §<slug>](traces/fast-search-<sid>/fast-search-003.md#<slug>)`
+- 每段结论后附证据 anchor：`见 [evidence-search-003 §<slug>](traces/evidence-search-<sid>/evidence-search-003.md#<slug>)`
 - 关键数字 / 原文摘录必须保留（P-EVIDENCE-001）
 - **显式找矛盾**：跨多源得到的结论若存在冲突 / 分歧，MUST 单独标出（如「⚠️ 分歧：源 A=X，源 B=Y」），MUST NOT 偷偷只选一个而不提分歧
 - 每条关键结论 MUST 标注循证状态：已回官方源复核 / 未复核存疑（沿用循证四步第 4 步）
@@ -121,7 +121,7 @@ model: claude-opus-4-7
 #### `<run_root>/deep-search/report.html`（给用户，LLM 自由生成）
 
 - 给用户直观看的可视化形态：卡片、表格、折叠区块、彩色高亮、内嵌 svg / mermaid 等均可
-- 引用循证：HTML 中链接必须可点击，外部 URL 直接 `<a href>`，本地 markdown 用相对路径 `<a href="../fast-search/fast-search-003.md#<slug>">`
+- 引用循证：HTML 中链接必须可点击，外部 URL 直接 `<a href>`，本地 markdown 用相对路径 `<a href="../evidence-search/evidence-search-003.md#<slug>">`
 - 与 `report.md` 语义等价：**不允许 HTML 多结论 / 少结论**（report.md 标出的源间分歧与循证状态，HTML 同样要呈现）
 - 形态自由，但要服务"用户读起来直观"
 
@@ -161,13 +161,13 @@ model: claude-opus-4-7
 
 ## 何时不该用 deep-search
 
-简单查询（找一个工具、查一个事实、单点对比）应该直接派 fast-search 或 site-search。本 subagent 存在的意义是循环判断的复杂调研。
+简单查询（找一个工具、查一个事实、单点对比）应该直接派 evidence-search 或 site-search。本 subagent 存在的意义是循环判断的复杂调研。
 
 ## 不要触发本 agent 的场景
 
 主 agent 路由前判断；命中以下任一条 **不**应派 deep-search：
 
-- **单轮信息已够**：「React 19 useTransition 怎么用」「PostgreSQL 16 新特性列表」——派 fast-search 或 site-search 即可
+- **单轮信息已够**：「React 19 useTransition 怎么用」「PostgreSQL 16 新特性列表」——派 evidence-search 或 site-search 即可
 - **单条事实查询**：「Anthropic CEO 是谁」「Claude 4.7 的发布时间」——一次查询就够
-- **用户只问一句概念**：「什么是 MCP」「RAG 是什么」——派 fast-search 收一波摘要即可
+- **用户只问一句概念**：「什么是 MCP」「RAG 是什么」——派 evidence-search 收一波摘要即可
 - **明确指定唯一站点**：「去 docs.aws.amazon.com 查 S3 跨区复制延迟」——派 site-search 直达，不需要 deep-search 规划层
