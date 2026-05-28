@@ -20,7 +20,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from lib import BackendError, emit, config, jina, serper, runtime
+from lib import BackendError, emit, config, jina, serper, bocha, runtime
 from lib.backends import ai_grok, ai_gemini, ai_doubao
 
 AI_BACKEND_MODULES = {
@@ -86,7 +86,7 @@ def main() -> int:
     ap.add_argument("--query", required=True)
     ap.add_argument("--max-results", type=int, default=10)
     ap.add_argument("--language", default=None, help="zh / zh-cn / en / en-us")
-    ap.add_argument("--prefer", choices=["jina", "serper", "ai"], default=None)
+    ap.add_argument("--prefer", choices=["jina", "serper", "bocha", "ai"], default=None)
     ap.add_argument(
         "--ai-backend",
         choices=["grok", "gemini", "doubao"],
@@ -131,6 +131,8 @@ def main() -> int:
             non_ai_order = ["jina", "serper"]
     elif args.prefer == "serper":
         non_ai_order = ["serper", "jina"]
+    elif args.prefer == "bocha":
+        non_ai_order = ["bocha", "serper", "jina"]
     else:
         # 默认 Jina 优先（语义更强）
         non_ai_order = ["jina", "serper"]
@@ -147,6 +149,10 @@ def main() -> int:
             if backend == "serper" and serper.is_available():
                 results = serper.search(args.query, max_results=args.max_results, language=args.language)
                 emit({"backend": "serper", "results": results, "fallback": None})
+                return 0
+            if backend == "bocha" and bocha.is_available():
+                results = bocha.search(args.query, max_results=args.max_results, language=args.language)
+                emit({"backend": "bocha", "results": results, "fallback": None})
                 return 0
         except BackendError as e:
             print(f"[search] {backend} 失败：{e}", file=sys.stderr)

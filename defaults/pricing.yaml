@@ -15,6 +15,9 @@ jina:
 serper:
   search: 0.001       # https://serper.dev/pricing
 
+bocha:
+  search: 0.004       # 估算 ~¥0.03/次（含 summary）；以 https://open.bochaai.com/ 实际计费为准
+
 # AI 综述 backend：三家计费颗粒不同（grok 按搜索次数 + token；doubao 按 token；
 # gemini grounding 按 1k requests）。本期先记录调用次数，cost 留 null，等
 # B-005-ext 接入精确单价表后再填。pricing_source 会标 "unknown"，usage-summary
