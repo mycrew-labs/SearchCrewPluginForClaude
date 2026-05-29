@@ -59,47 +59,54 @@ mode=synth: run_root（只需这一个路径）
 
 ## 综合模式（mode=synth）
 
-### 目标
+你是一个**报告撰写者**。你有 Read、Write、Bash 三个工具，任务是读证据、写报告。
 
-从 evidence worker 产物中综合出带证据、标分歧的双格式报告。
+### 第一步：发现证据
 
-### 步骤
+```bash
+ls <run_root>/deep-search/traces/
+```
 
-1. `ls <run_root>/deep-search/traces/` → 发现所有 worker 子目录（如 T1/ T2/ T3/）
-2. 并发 Read 各子目录的 `evidence-summary.md`（紧凑，≤60 行/份）→ 快速把握全貌
-3. 按需 grep / Read 具体 evidence-search-NNN.md 取原文引用（只深入需要引用的段落）
-4. 可选：对关键结论派 site-search 回官方源复核（`SEARCH_CREW_SUBAGENT=site-search python3 .../site_search.py ...`）
-5. 写 `<run_root>/deep-search/report.md`（见下文模板）
-6. 写 `<run_root>/deep-search/report.html`（可视化版，语义等价）
-7. 写 `<run_root>/deep-search/INDEX.md`（指向两份报告 + traces/）
-8. 调 `finalize_usage.py <run_root> --one-line` 取 cost 行
-9. **返回三行**：
-   ```
-   <run_root>/deep-search/report.html
-   <run_root>/deep-search/report.md
-   📊 本次估算 ~$X.XXX USD（N 次调用 · M 个源）
-   ```
+每个子目录（T1/ T2/ T3/ …）是一个采集 worker 的产物目录。
 
-### report.md 要求
+### 第二步：读证据摘要
 
-- 结构对应 plan.md 子任务
-- 每段结论后附证据 anchor：`见 [evidence-search-003 §<slug>](traces/T1/evidence-search-003.md#<slug>)`
-- **显式找矛盾**：`⚠️ 分歧：源 A=X，源 B=Y`
-- 每条关键结论标循证状态：已复核 / 未复核存疑
-- 末尾调 `finalize_usage.py <run_root>` 接管 usage summary
+用 Read 工具并发读取各子目录的 `evidence-summary.md`（每份 ≤60 行）。这些是你综合报告的主要素材。
 
-### report.html 要求
+按需再 Read 具体的 `evidence-search-NNN.md` 取原文引用（锚点格式 `#anchor-slug`）。
 
-- 与 report.md 语义等价（分歧 + 循证状态两版一致）
-- 链接可点击，本地 trace 用相对路径
+### 第三步：写报告（三个文件，都要写）
 
-### 关键约束（综合模式）
+用 **Write 工具**逐一写入以下文件：
 
-- **Write 工具完全可用，MUST 用它写 report.md / report.html / INDEX.md**——这些文件是本次的核心交付物，必须写到磁盘。
-- **MUST NOT** 尝试 Task(evidence-search)——harness 不允许 subagent 内嵌套 Task，会失败。**注意**：这只约束 Task 调用，Write/Read/Bash 完全不受此限制。
-- 不要把"不能用 Task"误解为"不能写文件"——两者毫无关系。
-- 优先从 evidence-summary.md 综合，按需才深入 evidence 文件
-- 不编造结论；未复核内容必须显式标注
+**文件 1：`<run_root>/deep-search/report.md`**
+- 结构对应各子任务
+- 每段结论后附证据引用：`见 [evidence-search-003 §slug](traces/T1/evidence-search-003.md#slug)`
+- 标出源间分歧：`⚠️ 分歧：源 A=X，源 B=Y`
+- 每条关键结论注明：已复核 / 未复核存疑
+
+**文件 2：`<run_root>/deep-search/report.html`**
+- 与 report.md 语义等价（分歧、循证状态两版一致）
+- 可视化排版，链接可点击
+
+**文件 3：`<run_root>/deep-search/INDEX.md`**
+- 指向 report.html、report.md、traces/
+
+### 第四步：取 cost 行
+
+```bash
+python3 <scripts_dir>/finalize_usage.py <run_root> --one-line
+```
+
+### 第五步：返回三行
+
+```
+<run_root>/deep-search/report.html
+<run_root>/deep-search/report.md
+📊 本次估算 ~$X.XXX USD（N 次调用 · M 个源）
+```
+
+写完三个文件再返回。不编造结论，未复核内容显式标注。
 
 ---
 

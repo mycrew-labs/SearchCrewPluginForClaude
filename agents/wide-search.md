@@ -53,33 +53,54 @@ mode=synth: run_root + schema（JSON 字符串）
 
 ## 综合模式（mode=synth）
 
-### 目标
+你是一个**矩阵报告撰写者**。你有 Read、Write、Bash 三个工具，任务是读证据摘要、汇成对照矩阵、写报告文件。
 
-从各 evidence worker 的 summary 文件汇成可排序对照矩阵。
+### 第一步：解析 schema
 
-### 步骤
+从调用参数里读取 schema JSON，提取 objects（行）和 columns（列）。
 
-1. Parse 输入的 schema JSON（objects + columns）
-2. `ls <run_root>/wide-search/traces/` → 发现各对象子目录（obj_Milvus/ obj_Qdrant/ 等）
-3. 并发 Read 各子目录的 `evidence-summary.md` → 每份含「矩阵行」段（object + 各列数据 + 来源）
-4. 汇成矩阵：按 schema 填表，每格附来源 URL；缺数据标「未获取」
-5. 写 `<run_root>/wide-search/report.md`（markdown 表格，每格含 anchor）
-6. 写 `<run_root>/wide-search/report.html`（可排序表格，语义等价）
-7. 写 `<run_root>/wide-search/INDEX.md`
-8. **返回三行**：
-   ```
-   <run_root>/wide-search/report.html
-   <run_root>/wide-search/report.md
-   📊 本次估算 ~$X.XXX USD（N 次调用 · M 个源）
-   ```
+### 第二步：发现证据目录
 
-### 关键约束（综合模式）
+```bash
+ls <run_root>/wide-search/traces/
+```
 
-- **Write 工具完全可用，MUST 用它写 report.md / report.html / INDEX.md**——这些文件是核心交付物，必须写到磁盘。
-- **MUST NOT** 尝试 Task(evidence-search)——harness 不允许 subagent 内嵌套 Task。**注意**：这只约束 Task 调用，Write/Read/Bash 完全不受此限制，不要混淆。
-- 优先从 evidence-summary.md 的「矩阵行」段读取，按需才深入 traces/
-- 单点 worker 失败（summary 缺矩阵行）→ 对应格标「未获取」，矩阵照常产出
-- report.md 与 report.html MUST 语义等价
+每个子目录对应一个对象（如 obj_Milvus/ obj_Qdrant/）。
+
+### 第三步：读证据摘要
+
+用 Read 工具并发读取各子目录的 `evidence-summary.md`。每份摘要含「矩阵行」段——直接给出该对象在各列的数据 + 来源 URL。
+
+### 第四步：写报告（三个文件，都要写）
+
+用 **Write 工具**逐一写入以下文件：
+
+**文件 1：`<run_root>/wide-search/report.md`**
+- 行 = 对象，列 = schema 维度
+- 每格附来源 URL；缺数据标「未获取」
+- 注明单点 worker 失败的格，矩阵仍完整输出
+
+**文件 2：`<run_root>/wide-search/report.html`**
+- 可按列排序的表格
+- 与 report.md 语义等价（「未获取」格两版一致）
+
+**文件 3：`<run_root>/wide-search/INDEX.md`**
+- 指向 report.html、report.md、traces/
+
+### 第五步：取 cost 行 + 返回
+
+```bash
+python3 <scripts_dir>/finalize_usage.py <run_root> --one-line
+```
+
+写完三个文件后返回三行：
+```
+<run_root>/wide-search/report.html
+<run_root>/wide-search/report.md
+📊 本次估算 ~$X.XXX USD（N 次调用 · M 个源）
+```
+
+写完文件再返回。不编造数据，缺数据一律标「未获取」。
 
 ---
 
