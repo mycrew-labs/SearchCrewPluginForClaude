@@ -7,22 +7,22 @@
 把"调研一个领域 / verify 一个说法 / 全面对比"这类需要循环判断的复杂任务从主对话隔离出去；deep-search 自己规划、综合、判断、跟进。
 ## Requirements
 ### Requirement: deep-search 派活优先，自抓允许，不重新实现 backend
-deep-search MUST NOT 自己拼 Jina / Serper 等 backend 请求。所有通用搜索 MUST 通过派 evidence-search 完成，所有官方站精确搜索 MUST 通过派 site-search 完成。但 deep-search **被允许**直接用 `fetch.py` 抓已知 URL，或沿页面链接深挖。
+deep-search MUST NOT 自己拼 Jina / Serper 等 backend 请求，MUST NOT 在 synth 模式下尝试 Task 派发 worker（harness 不允许）。plan 模式下负责规划并输出紧凑 JSON；synth 模式下负责从 traces/ 自发现产物、综合、产出报告。自抓（fetch.py 直连已知 URL）仍允许。
 
 **Lock**: user-confirmed
-**Confirmed-At**: 2026-05-28
+**Confirmed-At**: 2026-05-29
 
-#### Scenario: 派 evidence-search 做通用调研
-- **WHEN** deep-search 第一轮需要广度调研某子主题
-- **THEN** 派出 evidence-search subagent，不自己调 `search.py`
+#### Scenario: plan 模式输出紧凑 JSON
+- **WHEN** Task(deep-search, mode=plan, topic=...) 被调用
+- **THEN** deep-search 输出形如 `{"tasks":[{"id":"T1","title":"...","query_en":"...","query_zh":"..."},...]}` 的 JSON，同时写 plan.md
 
-#### Scenario: 自抓已知 URL
-- **WHEN** deep-search 在第二轮拿到一个具体 URL 想深挖
-- **THEN** 允许直接调 `fetch.py <url>`，无需多派一个 subagent
+#### Scenario: synth 模式自发现 traces
+- **WHEN** Task(deep-search, mode=synth, run_root=...) 被调用
+- **THEN** 通过 ls <run_root>/deep-search/traces/ 发现 worker 产物目录，读 INDEX.md，按需深入，产出 report.md + report.html，返回两个路径字符串
 
-#### Scenario: 禁止自拼 backend 请求
-- **WHEN** deep-search 想做一次通用搜索
-- **THEN** MUST 派 evidence-search；不允许自己直接 HTTP 调 Jina / Serper
+#### Scenario: 禁止 synth 模式 Task 派发
+- **WHEN** deep-search synth 模式需要更多数据
+- **THEN** 直接自抓（fetch.py）或用已有 traces；MUST NOT 尝试 Task(evidence-search)——harness 会失败
 
 ### Requirement: deep-search 第一轮产出 plan.md
 deep-search 第一轮 MUST 先把 topic 拆成研究计划：角度 + 子任务清单 + 每子任务的完成判据，写入 `<run_root>/deep-search/plan.md`。后续每轮基于 plan 推进；每轮末尾对 plan 中的子任务自评 done / not-done。

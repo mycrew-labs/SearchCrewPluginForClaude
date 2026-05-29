@@ -1,117 +1,105 @@
 ---
 name: search-deep
-description: 启动一次深度调研。主 agent 派 deep-search subagent 规划 + 多轮派活 + 综合，最终产出 HTML + Markdown 双格式报告。
+description: 启动一次深度调研。主 agent 两阶段编排：先 Task(deep-search mode=plan) 获取子任务 JSON，再并发 Task(evidence-search×N)，最后 Task(deep-search mode=synth) 综合产出报告。
 ---
 
 ## 用户主题
 
 `{{args}}`
 
-## 主 agent 工作流（作为 Leader）
+## 主 agent 工作流
 
-### 1. TaskCreate 建任务清单
+### 1. TaskCreate + 协作邀请
 
-派 deep-search 之前先调 `TaskCreate`，描述面向用户：「深度调研 ：{{args}}」。
-
-### 2. 协作邀请（P-UX-001）
-
-向用户输出一行简洁、非阻塞的提示（注意是真实显示给用户，不是内心独白）：
+```
+TaskCreate：深度调研：{{args}}
+```
 
 > 💡 如果你已经知道权威数据源或希望使用的查询条件，可以直接贴进来，AI 会优先采用。
 
-### 3. 派发前：明显歧义先一句话澄清（非阻塞）
+### 2. 派发前澄清（明显歧义先一句话，非阻塞）
 
-deep-search 是 subagent，跑起来后无法与用户来回交互，所以澄清 MUST 在派发前由主 agent 做：
+topic 有明显歧义 / 范围过宽时，先一句话含默认方向；已清晰则直接派。
 
-- topic **有明显歧义 / 范围过宽**时，先向用户发**一句话**澄清，且**句中言明一个合理默认**（如「你要的是模型架构、还是 Transformers 库用法？默认我按模型架构全面查」）
-- **非阻塞**：用户不答就按言明的默认继续派发，不要卡住等回复
-- topic **已清晰**时 MUST NOT 多问，直接派（默认静默，避免每次都打扰）
-
-### 4. 派 deep-search subagent
-
-派发前先造本次专属 run 目录（隔离本次 cost / call-cap / 产物）：
+### 3. 造本次 run 目录
 
 ```bash
 python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/run_paths.py --new
 ```
 
-输出是一个目录路径（`<run_root>`）。用 Task 工具派 `deep-search`，参数：
+记下输出路径作 `<run_root>`。
 
-- `topic`：原样传 `{{args}}`
-- `purpose`：如果你能从用户措辞推断更具体的意图，加这一段
-- **在派发 prompt 里明确写**：「本次 `SEARCH_CREW_RUN_ROOT=<上一步的目录>`，你所有脚本调用前带上它，**且派 evidence/site worker 时把这个目录原样传下去**」——lead + 所有 worker 的产物 / cost 全落这一个目录（deep 也准、好查阅）。
+### 4. 阶段一：规划（plan）
 
-### 5. 等返回
+```
+Task(deep-search, mode=plan, topic={{args}}, run_root=<run_root>)
+```
 
-deep-search 会返回三行：
+deep-search 返回**紧凑 JSON**（stdout，直接 parse，无需 Read 文件）：
 
+```json
+{
+  "complexity": "medium",
+  "tasks": [
+    {"id": "T1", "title": "...", "query_en": "...", "query_zh": "..."},
+    {"id": "T2", "title": "...", "query_en": "...", "query_zh": "..."}
+  ]
+}
+```
+
+### 5. 阶段二：并发采集（同 turn 发起所有 Task，勿串行）
+
+按 plan JSON 的 tasks，**同一 message 内**并发 Task(evidence-search × N)。
+
+每个 worker 的 Task prompt 包含：
+- `query`：task 的 query_en 和 query_zh（双语）
+- `target_dir`：`<run_root>/deep-search/traces/<task.id>/`（完整绝对路径）
+- `SEARCH_CREW_RUN_ROOT=<target_dir>`（worker 用它定位脚本路径）
+
+每个 worker 返回两行：
+```
+summary_path: <target_dir>/evidence-summary.md
+summary: <一句话>
+```
+
+主 agent 收到 N×(summary_path, summary)——**只存这两个字符串，不读文件内容**。
+
+### 6. 阶段三：综合（synth）
+
+```
+Task(deep-search, mode=synth, run_root=<run_root>)
+```
+
+只传 `run_root` 一个字符串。deep-search 自己 ls traces/ 发现所有 worker 产物，读 evidence-summary.md，综合出 report.md + report.html。
+
+返回三行：
 ```
 <run_root>/deep-search/report.html
 <run_root>/deep-search/report.md
-本次估算 ~$X.XXX USD（N 次调用 · ...）
+📊 本次估算 ~$X.XXX USD（N 次调用 · M 个源）
 ```
 
-记下 `<run_root>`（不写出来给用户，自己内部记），以便用户追问明细时 Read `<run_root>/usage-summary.md`。
+### 7. TaskUpdate + 阅读报告
 
-### 6. 阅读报告
-
-Read `<run_root>/deep-search/report.md`（不读 HTML，HTML 是给用户看的，读 HTML 效率低）。
-
-### 7. TaskUpdate 标 completed
+TaskUpdate 标 completed，Read `<run_root>/deep-search/report.md`。
 
 ### 8. 最终回复用户
 
-给用户的回复包含三块：
-
-**块 1：报告路径**（HTML 优先）
-
+**块 1：报告路径**
 ```
-📄 调研报告（可视化版本，浏览器打开看更直观）：
+📄 调研报告（浏览器打开更直观）：
    open <run_root>/deep-search/report.html      # mac
-   xdg-open <run_root>/deep-search/report.html  # linux
 ```
 
-按 `uname` / `$OSTYPE` 给出对应平台命令。
+**块 2：核心结论**（用自己的话，必须附证据 URL / 关键数字，不编造）
 
-**块 2：核心结论**（用你自己的话，从 report.md 综合，**必须**附证据 URL / 关键原文 / 关键数字，不许编造）
+**块 3：cost 一行**（直接用 deep-search synth 返回的第三行）
 
-**块 3：cost 一行总览**（P-USAGE-001）
-
-```
-📊 本次估算 ~$X.XXX USD（N 次调用 · M 个源 · K 次触发站点调用上限）
-```
-
-- N 次调用：本次 run 真实发出的请求总数
-- M 个源：本次 run 实际调用过的 distinct backend / site 数
-- K 次触发站点调用上限：被 `_http.py` 计数器拦下的请求；**K=0 时省略本段**
-
-获取这一行最稳的方式：调
-
-```bash
-python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/finalize_usage.py <run_root> --one-line
-```
-
-返回值是一行字符串，可直接拼到回复末尾。
-
-**绝对不要**在回复里写出 `<run_root>` 路径、详细 cost 拆分、`usage-summary.md` 字符串。
-
-### 9. 用户追问处理
-
-如果用户接着问「按 backend 拆开」/「细节」/「multimodal 调用占多少」等：
-
-- → Read `<run_root>/usage-summary.md` 后呈现该文件内容（按用户问题剪裁）
-
-如果用户接着问「我历史上总共花了多少」/「最近 10 次」：
-
-- → 提示用户跑：
-  ```
-  ! python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/usage.py --last 10
-  ```
-- 不要主动 Bash 它（会进 context）
+**绝对不要**写出 `<run_root>` 路径、详细 cost 拆分。
 
 ## 关键约束
 
 - TaskCreate 必须在派发之前
-- 同 turn 内若需派多个 subagent，必须一次性发起多个 Task 调用
-- 不复述 report 全文；用你自己的话综合 + 证据挂回
-- cost 总览**只一行**，不附路径、不展开拆分
+- 阶段二的 N 个 Task **MUST** 在同一 message 内并发发起（同 turn）
+- 只传路径，不传文件内容——主 agent context 与采集量解耦
+- cost 总览只一行

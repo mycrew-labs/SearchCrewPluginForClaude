@@ -35,14 +35,17 @@ wide-search MUST 产出与 deep-search 语义等价的双格式产物：`report.
 - **WHEN** 12 个 worker 中有 2 个失败
 - **THEN** 矩阵照常产出，那 2 行对应格标「未获取」，其余 10 行正常
 
-### Requirement: wide-search 一对象一 worker、同 turn 并行、复用 evidence/site-search
-wide-search lead MUST 为每个对象派一个独立 context 的 worker（避免单 context 串行处理 N 项导致的深度退化），且 MUST 在同一 message 内并行发起这些 Task 调用。worker MUST 复用现有 evidence-search（默认，haiku 廉价档）或 site-search（个别对象需官方源精确查时），MUST NOT 新建 worker subagent，MUST NOT 自己拼 backend 请求。派每个 worker 的 Task prompt MUST 含任务契约四要素（目标 / 输出格式 / 工具源指引 / 边界），其中「输出格式」MUST 要求 worker 按 schema 填一行、每格附源 URL。
+### Requirement: wide-search plan/synth 两模式；worker-spawn 由主 agent 负责
+Claude Code harness 不允许 subagent 内 Task，worker-spawn MUST 由主 agent（command）在 plan 阶段结束后负责。wide-search plan 模式 MUST 从 topic 中拆出对象清单 + 分析 schema，与用户确认后输出紧凑 JSON `{"objects":[...],"columns":[...]}` 返回主 agent；主 agent MUST 同 turn 并发 Task(evidence-search×N)，每个 worker 接收 (object, schema_columns, target_dir)；wide-search synth 模式 MUST 只接收 run_root，自发现 traces/，读 evidence-summary.md 矩阵行段，汇成矩阵报告，返回两个路径字符串。
 
-#### Scenario: 每对象独立 worker 并行
-- **WHEN** lead 确认了 12 个对象的 schema
-- **THEN** lead 在同一 message 内并行派最多 max_items 个 worker，每个研究一个对象
+**Lock**: user-confirmed
+**Confirmed-At**: 2026-05-29
 
-#### Scenario: worker 复用 evidence-search
-- **WHEN** 某对象只需通用网络调研
-- **THEN** lead 派 evidence-search（haiku）而非新建 worker subagent
+#### Scenario: plan 模式输出 schema JSON
+- **WHEN** Task(wide-search, mode=plan, topic=...) 被调用
+- **THEN** 与用户确认后输出 `{"objects":[...],"columns":[...]}` JSON；返回前 MUST 得到用户确认（×N 风险）
+
+#### Scenario: synth 模式自发现 traces 建矩阵
+- **WHEN** Task(wide-search, mode=synth, run_root=..., schema=...) 被调用
+- **THEN** ls <run_root>/wide-search/traces/，每个子目录对应一个对象；读 evidence-summary.md 矩阵行段；产出 report.md 表格 + report.html 可排序矩阵；返回两个路径字符串
 

@@ -1,95 +1,99 @@
 ---
 name: search-wide
-description: 启动一次广度调研。主 agent 派 wide-search lead，对 N 个同类对象跑同一套分析维度、并行派 worker，最终产出可排序对照矩阵（HTML + Markdown 双格式）。
+description: 启动一次广度调研。主 agent 两阶段编排：先 Task(wide-search mode=plan) 确认 schema，再并发 Task(evidence-search×N)，最后 Task(wide-search mode=synth) 汇成对照矩阵。
 ---
 
 ## 用户主题
 
 `{{args}}`
 
-## 主 agent 工作流（作为 Leader）
+## 主 agent 工作流
 
-### 1. TaskCreate 建任务清单
+### 1. TaskCreate + 协作邀请
 
-派 wide-search 之前先调 `TaskCreate`，描述面向用户：「广度调研（对照矩阵）：{{args}}」。
-
-### 2. 协作邀请
-
-向用户输出一行简洁、非阻塞的提示（真实显示给用户）：
+```
+TaskCreate：广度调研（对照矩阵）：{{args}}
+```
 
 > 💡 如果你已经明确要对比哪些对象、按哪几个维度，可以直接列出来，AI 会优先采用。
 
-### 3. 派 wide-search lead
-
-派发前先造本次专属 run 目录：
+### 2. 造本次 run 目录
 
 ```bash
 python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/run_paths.py --new
 ```
 
-输出是一个目录路径（`<run_root>`）。用 Task 工具派 `wide-search`，参数：
+记下输出路径作 `<run_root>`。
 
-- `topic`：原样传 `{{args}}`
-- `purpose`：如能从用户措辞推断更具体意图，加这一段
-- **在派发 prompt 里明确写**：「本次 `SEARCH_CREW_RUN_ROOT=<上一步的目录>`，你所有脚本调用前带上它，**且派 worker 时把这个目录原样传下去**」——本次矩阵的 lead + N 个 worker 的产物 / cost 全落这一个目录。
+### 3. 阶段一：规划 + 用户确认 schema（plan）
 
-注意：wide-search 会在**派 worker 前**把「对象清单 + 列 schema」抛回来要用户确认。如果它产出的确认请求出现在你这一层，原样转达给用户，等用户放行再让其继续——这是防「列错一次 ×N 亏」的关键闸。
+```
+Task(wide-search, mode=plan, topic={{args}}, run_root=<run_root>)
+```
 
-### 4. 等返回
+wide-search 先与用户确认对象清单 + 列 schema（×N 风险，必须等用户放行），再返回紧凑 JSON：
 
-wide-search 会返回三行：
+```json
+{
+  "objects": ["Milvus", "Qdrant", "Weaviate"],
+  "columns": ["性能", "许可证", "部署难度", "适用规模"]
+}
+```
 
+**注意**：wide-search 在 plan 模式里会与用户交互确认 schema，你等它返回 JSON 再继续。
+
+### 4. 阶段二：并发采集（同 turn 发起所有 Task）
+
+按 JSON 的 objects，**同一 message 内**并发 Task(evidence-search × N，N ≤ max_items)。
+
+每个 worker 的 Task prompt 包含：
+- `object`：研究的具体对象（如 "Milvus"）
+- `schema_columns`：columns JSON 数组（如 `["性能", "许可证", "部署难度", "适用规模"]`）
+- `target_dir`：`<run_root>/wide-search/traces/obj_<object>/`（完整绝对路径）
+- `SEARCH_CREW_RUN_ROOT=<target_dir>`
+
+每个 worker 返回两行：
+```
+summary_path: <target_dir>/evidence-summary.md
+summary: <一句话>
+```
+
+**主 agent 只存这两个字符串，不读文件内容**。
+
+超过 max_items 时分批（跑完一批再下一批），不一次铺满。
+
+### 5. 阶段三：综合矩阵（synth）
+
+```
+Task(wide-search, mode=synth, run_root=<run_root>, schema=<JSON 字符串>)
+```
+
+只传 run_root + schema JSON 字符串。wide-search 自己 ls traces/，读各 evidence-summary.md 的矩阵行段，汇成对照矩阵报告。
+
+返回三行：
 ```
 <run_root>/wide-search/report.html
 <run_root>/wide-search/report.md
-本次估算 ~$X.XXX USD（N 次调用 · ...）
+📊 本次估算 ~$X.XXX USD（N 次调用 · M 个源）
 ```
 
-记下 `<run_root>`（内部记，不写给用户）。
+### 6. TaskUpdate + 最终回复用户
 
-### 5. 阅读报告
-
-Read `<run_root>/wide-search/report.md`（不读 HTML，HTML 是给用户看的）。
-
-### 6. TaskUpdate 标 completed
-
-### 7. 最终回复用户
-
-三块：
-
-**块 1：报告路径**（HTML 优先，因为矩阵可排序对比，HTML 更直观）
-
+**块 1：矩阵报告路径**（HTML 优先，可排序对比）
 ```
-📄 对照矩阵（可视化版本，浏览器打开可按列排序对比）：
+📄 对照矩阵（浏览器打开可按列排序）：
    open <run_root>/wide-search/report.html      # mac
-   xdg-open <run_root>/wide-search/report.html  # linux
 ```
 
-按 `uname` / `$OSTYPE` 给出对应平台命令。
+**块 2：矩阵速读**（点出关键对照结论，附证据；「未获取」格如实说明）
 
-**块 2：矩阵速读**（用你自己的话点出关键对照结论，**必须**附证据；标「未获取」的格如实说明，不编造）
+**块 3：cost 一行**（synth 返回的第三行）
 
-**块 3：cost 一行总览**
-
-```
-📊 本次估算 ~$X.XXX USD（N 次调用 · M 个源 · K 次触发站点调用上限）
-```
-
-获取这一行最稳的方式：调
-
-```bash
-python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/finalize_usage.py <run_root> --one-line
-```
-
-**绝对不要**在回复里写出 `<run_root>` 路径、详细 cost 拆分。
-
-### 8. 用户追问处理
-
-与 search-deep 一致：追问明细 → Read `<run_root>/usage-summary.md` 按问题剪裁；追问历史总花费 → 提示用户跑 `! python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/usage.py --last 10`。
+**绝对不要**写出 `<run_root>` 路径、详细 cost 拆分。
 
 ## 关键约束
 
-- TaskCreate 必须在派发之前
-- wide-search 派 worker 前的 schema 确认请求 MUST 转达用户，等放行
-- 不复述矩阵全文；用你自己的话点结论 + 证据挂回
-- cost 总览**只一行**，不附路径、不展开拆分
+- wide-search plan 模式**必须等用户确认 schema** 再进阶段二
+- 阶段二的 N 个 Task **MUST** 同一 message 内并发（同 turn）
+- 只传路径和 schema JSON，不传文件内容
+- cost 总览只一行

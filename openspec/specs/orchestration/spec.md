@@ -170,22 +170,18 @@
 - **THEN** Claude Code 报告该命令不存在；真正的命令是 `/search-deep`、`/search-wide`、`/search-fast`（或带 `/search-crew:` 命名空间）
 
 ### Requirement: 派 search subagent 前造 run 目录并经环境变量下传
-主 agent 在派出 search subagent（site/deep/wide，及内部 worker evidence-search）**之前** MUST 用 `run_paths.py --new` 造一个唯一 run 目录，并在派发时通过 `SEARCH_CREW_RUN_ROOT` 环境变量把**目录路径**传给该 subagent。被派的 subagent MUST 在其所有脚本调用前带上该变量、产物写该目录下；lead（deep/wide）再派下级 worker 时 MUST 把同一 `SEARCH_CREW_RUN_ROOT` 原样传下去，使整条派发链的产物 / cost 全落同一目录。本需求**仅约束派 subagent 的场景**；`/search-fast` 直连 `ai_search.py`、不派 subagent，**不造 run 目录**——其打点经 `_http` 照常进永久统一日志 `~/.local/state/search-crew/calls.jsonl`，cost 一行由 `ai_search.py` 自报。
+主 agent 在派出 search subagent（site/evidence/deep/wide）**之前** MUST 用 `run_paths.py --new` 造一个唯一 run 目录，并在派发时通过 `SEARCH_CREW_RUN_ROOT` 环境变量把目录路径传给该 subagent。被派的 subagent MUST 在其所有脚本调用前带上该变量、产物写该目录下；evidence-search workers MUST 各写到 `<run_root>/deep-search/traces/<task_id>/`（deep）或 `<run_root>/wide-search/traces/<obj_id>/`（wide）子目录。本需求仅约束派 subagent 的场景；`/search-fast` 直连不造目录。
 
 **Lock**: user-confirmed
 **Confirmed-At**: 2026-05-29
 
-#### Scenario: 派 subagent 造 run 目录
-- **WHEN** 用户触发 `/search-deep <主题>`
-- **THEN** 主 agent 先 `run_paths.py --new` 造目录，再带 `SEARCH_CREW_RUN_ROOT=<目录>` 派 deep-search
+#### Scenario: 主 agent 并发 spawn workers
+- **WHEN** 主 agent 按 plan 派 N 个 evidence-search workers
+- **THEN** 同 turn 一次性发起 N 个 Task，每个带同一 SEARCH_CREW_RUN_ROOT；各 worker 产物落 traces/<id>/ 子目录
 
-#### Scenario: /search-fast 不造 run 目录
-- **WHEN** 用户触发 `/search-fast <主题>`
-- **THEN** 主 agent 直接跑 `ai_search.py`（不造 run 目录、不派 subagent）；调用经 `_http` 进永久 calls.jsonl，cost 一行取 ai_search 输出的 `cost_line`
-
-#### Scenario: lead 向 worker 传递 run 目录
-- **WHEN** deep-search 收到 `SEARCH_CREW_RUN_ROOT` 后派 evidence-search worker
-- **THEN** worker 的 Task 派发带同一 `SEARCH_CREW_RUN_ROOT`，worker 产物与打点落 lead 的同一目录
+#### Scenario: synthesizer 只收 run_root
+- **WHEN** 主 agent 调用 Task(deep-search mode=synth)
+- **THEN** 传 run_root；不传文件名列表；synthesizer 通过 ls traces/ 自发现
 
 ### Requirement: 对话语义只自动触发快答与 site-search；deep/wide 显式专属
 无显式 slash command 时，主 agent SHALL 按对话语义自动派发，且**仅限**两种：①通用 casual 查询（「查一下…」「找几个…」）→ **`/search-fast` 的 AI 综述快答路径**（主 agent 直连 `ai_search.py`，不派 subagent）；②定向官方站语气或命中权威性敏感主题（临床 / 专利 / 学术等）→ site-search。deep-search 与 wide-search MUST **仅**由 `/search-deep` / `/search-wide` 显式触发，**MUST NOT** 由对话语义自动派发。
@@ -208,4 +204,18 @@
 #### Scenario: 深挖不自动派 deep
 - **WHEN** 用户说「深入研究 vLLM 的调度器实现」（未用 slash 命令）
 - **THEN** 主 agent 不自动派 deep-search；提示用 `/search-deep`，或先给 /search-fast 快答
+
+### Requirement: 主 agent 直接 spawn evidence-search workers；lead 只做规划与综合
+Claude Code harness 不允许 subagent 内嵌套 Task 调用，因此 worker-spawn MUST 在主 agent（command 层）完成。deep-search / wide-search 作为 subagent 仅负责「plan（规划）」和「synth（综合）」两个阶段；主 agent 在两次 Task 调用之间负责并发 spawn evidence-search workers。传递协议 MUST 保持最小：plan 阶段返回紧凑 JSON（~300-500 token），synthesizer 只接收 run_root（一个路径字符串），通过 `ls traces/` 自发现 worker 产物——主 agent context 增量与采集量无关。
+
+**Lock**: user-confirmed
+**Confirmed-At**: 2026-05-29
+
+#### Scenario: /search-deep 两阶段流程
+- **WHEN** 用户触发 `/search-deep <topic>`
+- **THEN** 主 agent 先 Task(deep-search mode=plan) 得紧凑 plan JSON，再并发 Task(evidence-search×N)，再 Task(deep-search mode=synth run_root) 得报告路径；主 agent context 只增加 JSON plan + N×(path,summary) + 两个路径字符串
+
+#### Scenario: synthesizer 只接收路径不接收内容
+- **WHEN** 主 agent 调用 synthesizer（deep/wide mode=synth）
+- **THEN** 只传 run_root 一个路径；synthesizer 自己 ls traces/ 发现 worker 产物，不由主 agent 传文件名列表
 
