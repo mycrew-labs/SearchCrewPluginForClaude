@@ -1,0 +1,49 @@
+flowchart TB
+    subgraph callers["调用方"]
+        main["主对话 · web-page-fetch skill<br/>fetch.py --real-browser"]
+        research["调研 subagent（evidence/site-search）<br/>fetch.py 不带开关，批量抓取"]
+    end
+
+    subgraph fetchpy["fetch.py 统一分派"]
+        directq{"开关开 且 host 命中直达清单？<br/>feishu / lark / notion / yuque / 微信公众号"}
+        chain["普通链：直连 GET → 反爬识别<br/>→ raw 原文直返 / Jina Reader 渲染"]
+        blockedq{"被挡或抓取失败？<br/>anti_bot · needs_auth · jina 失败"}
+        rb["升级层 lib/real_browser.py（新增）<br/>Bearer 鉴权 · 202 轮询续等<br/>coverage 残缺判失败 · 密码零外泄"]
+        warnfall["直达失败 → 回落普通链<br/>成功输出附 warning：内容可能不完整（新增）"]
+    end
+
+    subgraph upf["universal-page-fetcher · 独立项目（不合并）"]
+        worker["Cloudflare Worker 网关<br/>/fetch 轮询 · /health 探活"]
+        chrome["用户真实已登录 Chrome<br/>自动滚动遍历 + 语义分区抽取"]
+    end
+
+    subgraph outputs["输出（三态契约不变）"]
+        ok["成功：markdown<br/>source: jina-reader / raw / universal-page-fetcher"]
+        blocked["blocked + on_blocked 策略<br/>honest 诚实告知 / collaborate 给协作路径"]
+        webfetch["WEBFETCH_FALLBACK<br/>回落内置 WebFetch"]
+    end
+
+    opencli["OpenCLI remote_host 层（已移除）<br/>B-006 旧方案，服务端从未存在<br/>代码 / 配置 / 文档全量扫净"]
+
+    main -->|"带 --real-browser"| directq
+    research -->|"无开关，永不升级"| chain
+    directq -->|"命中"| rb
+    directq -->|"未命中"| chain
+    chain --> blockedq
+    blockedq -->|"是 且 开关开<br/>（每 URL 最多升级一次）"| rb
+    blockedq -->|"是 且 开关关"| blocked
+    blockedq -->|"否"| ok
+    rb -->|"HTTPS"| worker
+    worker <-->|"扩展出站 WebSocket"| chrome
+    rb -->|"成功"| ok
+    rb -->|"直达失败"| warnfall
+    warnfall --> chain
+    rb -->|"被挡升级也失败"| blocked
+    chain -.->|"无 key / 网络失败"| webfetch
+
+    classDef added fill:#dcfce7,stroke:#16a34a,color:#14532d
+    classDef removed fill:#fee2e2,stroke:#dc2626,color:#7f1d1d,stroke-dasharray:5 5
+    classDef external fill:#e0e7ff,stroke:#4f46e5,color:#312e81
+    class rb,warnfall added
+    class opencli removed
+    class worker,chrome external

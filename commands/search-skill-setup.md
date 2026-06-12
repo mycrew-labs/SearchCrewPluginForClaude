@@ -137,16 +137,17 @@ git config core.hooksPath .githooks
   ! python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/usage.py --last 10
 ```
 
-### 9. 进阶（可选）：远程 browser-host
+### 9. 进阶（可选）：升级抓取层 universal-page-fetcher
 
-> 默认关闭，绝大多数用户用不到，**不要**主动引导普通用户配。仅当用户明确要抓「登录墙 / 付费墙」内容（如付费 paper PDF）且已自建 browser-host 时才提。
+> 未配置不影响任何基础功能，**不要**主动引导普通用户配。仅当用户明确要抓「登录墙 / 付费墙 / 飞书 / Notion / 语雀 / 微信公众号」内容时才提。
 
-web-page-fetch 遇到 `needs_auth`（登录 / 付费墙）默认走 `on_blocked` 策略（honest / collaborate）。若用户在一台带桌面的 Linux 上跑了 [opencli-browser-host](https://github.com/mycrew-labs)（用真实登录态浏览器抓取 + frp 暴露的 HTTP API），可在 `~/.config/search-crew/limits.yaml` 的 `web_page_fetch.remote_host` 填端点 + basic auth 启用之。
+web-page-fetch 在被挡（needs_auth / anti_bot）或命中直达域名清单时，可升级到 [universal-page-fetcher](https://github.com/mycrew-labs/universal-page-fetcher)（用户自部署的 Cloudflare Worker 网关 + 真实已登录浏览器）抓取。
 
-- **客户端已接好**（fetch.py 抓取链已含 opencli-remote 层，`enabled: true` + 填 endpoint 即生效）；**服务端**需你自建 opencli-browser-host（backlog B-006）。
-- 安全提醒：该 API 背后是登录态真实浏览器；只暴露带鉴权 + 只读收窄的 HTTP 包装，别裸暴露 daemon。
+- **客户端已接好**：连接配置按对方约定读环境变量 `UNIVERSAL_PAGE_FETCHER_WORKER_URL` / `UNIVERSAL_PAGE_FETCHER_PASSWORD` 或 `~/.config/universal-page-fetcher/config.json`，配好即生效；**服务端**（Worker + 浏览器扩展）按其项目 README 自部署。
+- 分派策略（直达域名清单、轮询预算）在 `~/.config/search-crew/limits.yaml` 的 `web_page_fetch.real_browser` 段。
+- 安全提醒：网关背后是登录态真实浏览器，密码只走 `wrangler secret` 与本机配置，不进任何仓库；setup MUST NOT 输出密码值。
 
-setup 检查到 `remote_host.enabled: true` 时，可顺带 `curl <endpoint>` 探一下连通性并告知用户。
+setup 检查到连接配置存在时，可带 Bearer 头 `curl <workerUrl>/health` 探活并告知用户 `extensionOnline` 状态（执行端浏览器是否在线）。
 
 ## 关键约束
 

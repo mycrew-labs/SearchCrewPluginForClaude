@@ -1,58 +1,13 @@
-# web-page-fetch Specification
+# web-page-fetch Delta: upf-fetch-backend
 
-## Purpose
-TBD - created by archiving change public-fetch-and-command-rename. Update Purpose after archive.
-## Requirements
-### Requirement: 主 agent 读 URL 优先用 web-page-fetch，零 key 才回落内置 WebFetch
-当用户给出具体 URL 要求读取 / 总结 / 抽取页面或文件内容时，主 agent SHALL 优先调用 `fetch.py`（经 `web-page-fetch` skill 指引），而非直接用内置 WebFetch。仅当 `fetch.py` 返回 `WEBFETCH_FALLBACK` marker（无 key / 网络失败）时，才改用内置 WebFetch。
+## REMOVED Requirements
 
-#### Scenario: 读普通网页优先走 fetch.py
-- **WHEN** 用户说「读一下这个页面：https://example.com/article」
-- **THEN** 主 agent 调 `python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/fetch.py <url>`，用其返回的 markdown，而非直接调内置 WebFetch
+### Requirement: web-page-fetch 按 on_blocked 策略分派 + 已知不支持站点
+**Reason**: 「微信公众号已知不支持」的承诺被 universal-page-fetcher（真实已登录浏览器执行端）推翻；「B-006 远程 browser-host 预留插入点」的表述随 OpenCLI 方案作废。分派行为本身保留，由下方 ADDED 的「web-page-fetch 分派与升级路径」需求接替并扩展。
+**Migration**: 原 on_blocked 策略语义（honest / collaborate、不解验证码、不把被挡页当正文）全部并入新需求，无行为丢失；删除的只有「微信不支持」承诺与 OpenCLI 预留表述。
+**原 Lock**: user-confirmed（2026-05-26）——本删除已于 2026-06-12 单独提请用户确认。
 
-#### Scenario: 零 key 回落内置 WebFetch
-- **WHEN** `fetch.py` 返回 `{"fallback": "WEBFETCH_FALLBACK"}`
-- **THEN** 主 agent 改用内置 WebFetch 完成读取
-
-### Requirement: fetch.py 按 Content-Type 区分 HTML 与 raw
-`fetch.py` SHALL 先直连 GET 目标 URL 拿到 body 与响应 `Content-Type`，据此判定：`text/html` / `application/xhtml+xml` 走 Jina Reader 渲染（`source: "jina-reader"`）；`text/plain` / `text/markdown` / `application/json` / 其他 `text/*` 非 html / 源码类 / `application/xml` 等直接返回原文（`source: "raw"`，不经 Jina Reader）。Content-Type 缺失或含糊时，MUST 用「body 是否含 HTML 标签」兜底判定。MUST NOT 靠 URL host / 扩展名清单判定。
-
-**Lock**: user-confirmed
-**Confirmed-At**: 2026-05-26
-
-#### Scenario: raw 文件原文直取
-- **WHEN** fetch.py 抓 `https://raw.githubusercontent.com/owner/repo/main/README.md`，响应 Content-Type 为 `text/plain`
-- **THEN** 返回 `{"source": "raw", "markdown": <文件原文>, "fallback": null}`，内容不经 Jina Reader 处理
-
-#### Scenario: HTML 页面走 Jina Reader 渲染
-- **WHEN** fetch.py 抓一个 `text/html` 页面
-- **THEN** 该 URL 二次送 Jina Reader，返回 `{"source": "jina-reader", "markdown": <渲染后 markdown>}`
-
-#### Scenario: Content-Type 含糊时按有无 HTML 标签兜底
-- **WHEN** 响应 Content-Type 缺失 / 为 `application/octet-stream`，且 body 不含 `<html` / `<body` / `<!doctype` 等 HTML 标签
-- **THEN** 当 raw 返回原文
-
-### Requirement: fetch.py 识别被挡页并判失败，区分 anti_bot 与 needs_auth，不当正文返回
-`fetch.py` 抓回内容后 SHALL 识别两类「被挡」并判失败，MUST NOT 把被挡页当正文：
-- **anti_bot**（验证码 / 风控墙）：内容**同时**满足「短内容（如 < 1500 字）」与「命中反爬强信号短语（`环境异常` / `完成验证后即可继续访问` / `去验证` / `requiring CAPTCHA` / `拖动下方滑块` / `captcha` 等，大小写不敏感）」→ 判 `anti_bot`。MUST NOT 走 `WEBFETCH_FALLBACK`（内置 WebFetch 对同一道墙同样无效）。
-- **needs_auth**（登录墙 / 付费墙）：直连返回 HTTP 401 / 403 → 判 `needs_auth`。
-
-被挡输出统一含 `on_blocked`（取自 `limits.yaml` 的 `web_page_fetch.on_blocked`，honest / collaborate），透传给主 agent：`{"source": null, "markdown": null, "blocked": "anti_bot"|"needs_auth", "on_blocked": "...", "fallback": null}`。
-
-**Lock**: user-confirmed
-**Confirmed-At**: 2026-05-26
-
-#### Scenario: 微信验证墙判为 anti_bot
-- **WHEN** fetch.py 抓微信公众号文章，Jina Reader 返回含「环境异常」「去验证」的短验证页
-- **THEN** 返回 `{"blocked": "anti_bot", ...}`，不把验证页当正文
-
-#### Scenario: 401/403 判为 needs_auth
-- **WHEN** fetch.py 直连某 URL 返回 HTTP 403
-- **THEN** 返回 `{"blocked": "needs_auth", "on_blocked": <策略>, "fallback": null}`，不走 WEBFETCH_FALLBACK
-
-#### Scenario: 正常长文不被误判
-- **WHEN** fetch.py 抓一篇正常讲解「验证码技术」的长文（含「captcha」字样但内容长、非验证墙）
-- **THEN** 不判 anti_bot，正常返回正文（双条件中「短内容」不满足）
+## ADDED Requirements
 
 ### Requirement: web-page-fetch 分派与升级路径
 `web-page-fetch` skill SHALL 指引主 agent 以 `fetch.py --real-browser <url>` 作为读 URL 的统一入口，并按输出分派：(1) `source` 非 null → 用返回 markdown；(2) `fallback: WEBFETCH_FALLBACK` → 改用内置 WebFetch；(3) `blocked`（anti_bot / needs_auth）→ 按 `on_blocked` 策略处理：`honest` = 诚实告知未取到正文；`collaborate` = 诚实说明 + 按 blocked 类型给协作路径。任何情况 MUST NOT 解验证码、MUST NOT 把被挡页当正文。输出含 `warning` 字段时，主 agent MUST 向用户说明内容可能不完整。skill 文档 MUST NOT 再把微信公众号标注为不支持——该类站点经升级层抓取，升级层不可用时按 blocked 流程诚实处理。
@@ -129,4 +84,3 @@ universal-page-fetcher 返回 `coverage.suspectIncomplete === true` 时，`fetch
 #### Scenario: 鉴权失败不泄露密码
 - **WHEN** 升级请求返回 HTTP 401
 - **THEN** stderr 只含「鉴权失败，请核对 universal-page-fetcher 配置」类固定文案，不含 Authorization 头或密码值，且本进程内不再重试升级层
-

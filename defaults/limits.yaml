@@ -3,7 +3,7 @@
 # 这些是硬上限的兜底值，避免 deep-search 无限循环 / evidence-search 抓太多。
 # 想加大 / 减小可以直接改。
 
-last_updated: "2026-05-21"
+last_updated: "2026-06-12"
 
 fast_search:
   max_results: 5         # 每次抓多少个搜索结果
@@ -43,18 +43,27 @@ call_cap:
 # - honest（默认）：诚实说明被挡、未取到正文，不打断流程
 # - collaborate：诚实说明 + 主动给用户协作路径（浏览器打开贴正文 / 本地文件路径 / 提供 cookies）
 #   适合你常读需登录/付费内容、愿意配合的场景
-# 未来 B-006 远程 browser-host 就绪后，needs_auth 会先自动走远程，仍拿不到才落到本策略。
+# 升级层（universal-page-fetcher）配置好且调用带 --real-browser 时，被挡会先自动升级，
+# 仍拿不到才落到本策略。
 web_page_fetch:
   on_blocked: honest
 
-  # 进阶（可选，默认关）：远程 browser-host —— fetch.py 抓取链的中间层
-  # （jina-reader → **opencli-remote(本段)** → Claude WebFetch）。遇 jina 失败 / 反爬 /
-  # needs_auth 时，若本段 enabled，会 GET `<endpoint>?url=<目标>`（带 basic auth）用真实
-  # 登录态浏览器抓取。**客户端已接好**（enabled+endpoint 即生效）；服务端需你在一台带桌面
-  # 的 Linux 上跑 opencli-browser-host（backlog B-006）+ frp 暴露，再填端点和 basic auth。
-  # 默认 enabled:false → 该层跳过，行为同纯 jina→WebFetch。
-  remote_host:
-    enabled: false
-    endpoint: ""              # 如 https://browser-host.yourdomain.com/fetch
-    auth_user: ""             # frp HTTP 代理 basic auth 用户名
-    auth_pass: ""             # frp HTTP 代理 basic auth 密码（建议从环境变量注入，别硬写）
+  # 升级抓取层：universal-page-fetcher —— 真实已登录浏览器执行端
+  # （https://github.com/mycrew-labs/universal-page-fetcher，自部署 Worker + Chrome 扩展）。
+  # 连接配置（Worker 地址 + 密码）不在本文件，按对方自有约定读：
+  #   环境变量 UNIVERSAL_PAGE_FETCHER_WORKER_URL / UNIVERSAL_PAGE_FETCHER_PASSWORD
+  #   或 ~/.config/universal-page-fetcher/config.json
+  # 本段只管分派策略。升级行为还需调用方显式带 `--real-browser`，任何调用方按需开启
+  # （需登录态 / 虚拟滚动 / 被挡才升级；批量抓取只对确有需要的 URL 开——执行端并发
+  # 上限 10、单任务分钟级，整批盲目开启会打爆）。
+  real_browser:
+    # 域名直达清单：已知普通链「成功但残缺」的站点（虚拟滚动长文档 / 强风控），
+    # 直接走真实浏览器，不浪费一次直连 + Jina。匹配：host 等于条目或以 `.<条目>` 结尾。
+    direct_domains:
+      - feishu.cn
+      - larksuite.com
+      - notion.so
+      - notion.site
+      - yuque.com
+      - mp.weixin.qq.com
+    wait_sec: 480   # 单次升级抓取的轮询总预算（秒）；执行端单任务上限 15 分钟，CLI 不等满

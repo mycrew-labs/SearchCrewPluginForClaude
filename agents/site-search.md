@@ -25,6 +25,7 @@ model: claude-sonnet-4-6
 
 **所有脚本调用（search.py / fetch.py / 站点脚本 / finalize_usage.py）命令前 MUST 带**：
 `SEARCH_CREW_RUN_ROOT=<上级给的目录>` + `SEARCH_CREW_SUBAGENT=site-search`。
+`fetch.py` 确需真实浏览器的页面（需登录态 / 虚拟滚动文档 / 被挡）可带 `--real-browser` 升级；只对确有需要的 URL 开，别整批开启（执行端并发上限 10）。
 
 ## 决策树（关键，按顺序判断）
 

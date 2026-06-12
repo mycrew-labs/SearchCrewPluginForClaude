@@ -38,7 +38,7 @@ model: claude-haiku-4-5-20251001
    - **证据类型**：`客观规格`（官方/第三方实测的硬指标）/ `独立测评`（独立机构横评）/ `用户体验`（社区真实使用反馈）/ `厂商宣传`（品牌自述，利益相关）/ `二手转述`（无原始出处的转载）。**领域相关**：参数信规格/实测，体验信用户社区，排名信独立测评。
    - **firsthand**：能追到原始数据/官方规格/原始实测 → `true`；"据说""有人测过"的转述 → `false`。
    - **lane**：来自中文源 `zh` 还是英文源 `en`。
-5. **补抓正文（并发）**：serper/bocha 只给 snippet/summary；top 结果用 `fetch.py <url1> <url2> ...` 一次性并发补抓。jina 已带 content 免抓。
+5. **补抓正文（并发）**：serper/bocha 只给 snippet/summary；top 结果用 `fetch.py <url1> <url2> ...` 一次性并发补抓。jina 已带 content 免抓。确需真实浏览器的 URL（需登录态 / 飞书 · Notion · 语雀等虚拟滚动文档 / 被反爬墙挡）可单独带 `--real-browser` 升级抓取；只对确有需要的 URL 开，MUST NOT 整批盲目开启（执行端并发上限 10、单任务分钟级）。
 6. **写 evidence 文件**：每条结果 → `<target_dir>/evidence-search-NNN.md`，YAML front-matter 含 `url/ranking/recommended/keywords/lane/evidence_type/firsthand`；关键段加 `### anchor: <slug>`。
 7. **写 INDEX.md**：`<target_dir>/INDEX.md`，wiki 风格（文件列表按 ranking + 简介 + 关键词 + Next-Read）。
 8. **写 evidence-summary.md**（**关键输出**）：`<target_dir>/evidence-summary.md`，≤60 行，精炼结构：

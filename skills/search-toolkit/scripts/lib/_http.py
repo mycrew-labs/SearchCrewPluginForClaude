@@ -233,6 +233,59 @@ def request_text_meta(
     )
 
 
+def request_status_text(
+    method: str,
+    url: str,
+    *,
+    backend: str,
+    endpoint: str,
+    headers: dict[str, str] | None = None,
+    timeout: int = DEFAULT_TIMEOUT,
+    units: int | None = 1,
+    query: str | None = None,
+    cap_exempt: bool = False,
+) -> tuple[int, str]:
+    """发起请求返回 (status, text)，HTTP 非 2xx 不抛异常（供轮询类状态机分支）。
+
+    仅网络错误 / 超时仍 raise BackendError。打点与 cap 语义同其余 helper。
+    """
+    _check_and_increment_cap(backend, query=query, cap_exempt=cap_exempt)
+
+    final_headers = {"User-Agent": USER_AGENT}
+    if headers:
+        final_headers.update(headers)
+    req = urllib.request.Request(url, method=method, headers=final_headers)
+    start = time.monotonic()
+    status: int | str = "error"
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            status = resp.status
+            return resp.status, resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as e:
+        status = e.code
+        body = ""
+        try:
+            body = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            pass
+        return e.code, body
+    except urllib.error.URLError as e:
+        status = "network-error"
+        raise BackendError(backend, f"网络错误: {e.reason}", retryable=True) from e
+    except TimeoutError as e:
+        status = "timeout"
+        raise BackendError(backend, "请求超时", retryable=True) from e
+    finally:
+        _record_call(
+            backend=backend,
+            endpoint=endpoint,
+            status=status,
+            latency_ms=int((time.monotonic() - start) * 1000),
+            units=units,
+            query=query,
+        )
+
+
 def _request_text_impl(
     method: str,
     url: str,

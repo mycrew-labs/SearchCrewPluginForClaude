@@ -117,33 +117,138 @@ class TestFetchDispatch(unittest.TestCase):
         self.assertEqual(out.get("blocked"), "anti_bot")
 
 
-class TestRemoteHostFailover(unittest.TestCase):
-    """B-006 opencli-remote 中间层：默认关跳过；开启则在 jina 失败时兜底。"""
+class TestRealBrowserUpgrade(unittest.TestCase):
+    """universal-page-fetcher 升级层：开关默认关；域名直达；被挡升级；失败回落。"""
 
-    def test_disabled_returns_none(self):
-        with mock.patch.object(fetch.config, "load_limits", return_value={"web_page_fetch": {"remote_host": {"enabled": False}}}):
-            self.assertIsNone(fetch._try_remote_host("https://x.test"))
+    def setUp(self):
+        self._captured = {}
 
-    def test_enabled_calls_remote_and_returns_markdown(self):
-        cfg = {"web_page_fetch": {"remote_host": {
-            "enabled": True, "endpoint": "https://bh.test/fetch",
-            "auth_user": "u", "auth_pass": "p"}}}
-        captured = {}
-        def fake_text(_m, url, **kw):
-            captured["url"] = url; captured["headers"] = kw.get("headers", {})
-            return "# 远程抓到的正文\n够长的内容" * 5
-        with mock.patch.object(fetch.config, "load_limits", return_value=cfg):
-            with mock.patch.object(fetch._http, "request_text", side_effect=fake_text):
-                out = fetch._try_remote_host("https://x.test/a")
-        self.assertEqual(out["source"], "opencli-remote")
-        self.assertIn("远程抓到的正文", out["markdown"])
-        self.assertTrue(captured["url"].startswith("https://bh.test/fetch?url="))
-        self.assertTrue(captured["headers"]["Authorization"].startswith("Basic "))
+    def _run(self, url, *, flag=False):
+        argv = ["fetch.py"] + (["--real-browser"] if flag else []) + [url]
+        with mock.patch.object(fetch, "emit", lambda p: self._captured.update(p)):
+            with mock.patch.object(sys, "argv", argv):
+                fetch.main()
+        return self._captured
 
-    def test_enabled_but_no_endpoint_returns_none(self):
-        cfg = {"web_page_fetch": {"remote_host": {"enabled": True, "endpoint": ""}}}
-        with mock.patch.object(fetch.config, "load_limits", return_value=cfg):
-            self.assertIsNone(fetch._try_remote_host("https://x.test"))
+    def test_default_off_blocked_no_upgrade_request(self):
+        # 开关关：被挡直接输出 blocked，全程不碰升级层
+        with mock.patch.object(fetch.real_browser, "fetch_page") as rb:
+            with mock.patch.object(fetch._http, "request_text_meta", return_value=("环境异常，去验证", "text/html")):
+                out = self._run("https://mp.weixin.qq.com/s?x=1", flag=False)
+        rb.assert_not_called()
+        self.assertEqual(out.get("blocked"), "anti_bot")
+
+    def test_flag_on_needs_auth_upgrades_first(self):
+        from lib import BackendError
+        err = BackendError("fetch", "HTTP 403: Forbidden", http_status=403)
+        with mock.patch.object(fetch.real_browser, "fetch_page",
+                               return_value={"title": "T", "markdown": "# 登录态拿到的正文", "coverage": {"reachedBottom": True}}):
+            with mock.patch.object(fetch._http, "request_text_meta", side_effect=err):
+                out = self._run("https://paper.example.com/paywalled", flag=True)
+        self.assertEqual(out["source"], "universal-page-fetcher")
+        self.assertIn("登录态拿到的正文", out["markdown"])
+        self.assertIsNone(out["fallback"])
+
+    def test_flag_on_upgrade_fails_falls_back_to_blocked(self):
+        from lib import BackendError
+        err = BackendError("fetch", "HTTP 403: Forbidden", http_status=403)
+        with mock.patch.object(fetch.real_browser, "fetch_page", return_value=None):
+            with mock.patch.object(fetch._http, "request_text_meta", side_effect=err):
+                out = self._run("https://paper.example.com/paywalled", flag=True)
+        self.assertEqual(out.get("blocked"), "needs_auth")
+
+    def test_direct_domain_skips_normal_chain(self):
+        with mock.patch.object(fetch.real_browser, "fetch_page",
+                               return_value={"title": "飞书文档", "markdown": "# 完整正文", "coverage": {}}) as rb:
+            with mock.patch.object(fetch._http, "request_text_meta") as direct:
+                out = self._run("https://xxx.feishu.cn/docx/yyy", flag=True)
+        direct.assert_not_called()  # 不发直连，也就不会有 Jina
+        rb.assert_called_once()
+        self.assertEqual(out["source"], "universal-page-fetcher")
+
+    def test_non_direct_domain_normal_chain_no_upgrade(self):
+        with mock.patch.object(fetch.real_browser, "fetch_page") as rb:
+            with mock.patch.object(fetch._http, "request_text_meta", return_value=("正常正文", "text/plain")):
+                out = self._run("https://example.com/article", flag=True)
+        rb.assert_not_called()
+        self.assertEqual(out["source"], "raw")
+
+    def test_direct_fail_falls_back_with_warning(self):
+        # 直达失败 → 回落普通链成功，但必须带 warning（内容可能不完整）
+        with mock.patch.object(fetch.real_browser, "fetch_page", return_value=None):
+            with mock.patch.object(fetch._http, "request_text_meta", return_value=("<html>x</html>", "text/html")):
+                with mock.patch.object(fetch.jina, "fetch", return_value={"url": "u", "markdown": "残缺正文", "source": "jina-reader"}):
+                    out = self._run("https://xxx.feishu.cn/docx/zzz", flag=True)
+        self.assertEqual(out["source"], "jina-reader")
+        self.assertEqual(out.get("warning"), "real_browser_unavailable_content_may_be_incomplete")
+
+    def test_direct_fail_then_blocked_only_one_upgrade_attempt(self):
+        # 直达已失败过 → 普通链再被挡时不二次升级
+        with mock.patch.object(fetch.real_browser, "fetch_page", return_value=None) as rb:
+            with mock.patch.object(fetch._http, "request_text_meta", return_value=("环境异常，去验证", "text/html")):
+                out = self._run("https://mp.weixin.qq.com/s?x=2", flag=True)
+        self.assertEqual(rb.call_count, 1)
+        self.assertEqual(out.get("blocked"), "anti_bot")
+
+
+class TestRealBrowserClient(unittest.TestCase):
+    """lib/real_browser：配置读取、轮询状态机、coverage 判定、密码不外泄。"""
+
+    def setUp(self):
+        from lib import real_browser
+        self.rb = real_browser
+        self.rb._availability_cache = None  # 清进程级缓存
+        for k in ("UNIVERSAL_PAGE_FETCHER_WORKER_URL", "UNIVERSAL_PAGE_FETCHER_PASSWORD"):
+            os.environ.pop(k, None)
+
+    def tearDown(self):
+        self.rb._availability_cache = None
+        for k in ("UNIVERSAL_PAGE_FETCHER_WORKER_URL", "UNIVERSAL_PAGE_FETCHER_PASSWORD"):
+            os.environ.pop(k, None)
+
+    def _set_env(self):
+        os.environ["UNIVERSAL_PAGE_FETCHER_WORKER_URL"] = "https://w.test"
+        os.environ["UNIVERSAL_PAGE_FETCHER_PASSWORD"] = "TESTSECRET"
+
+    def test_unconfigured_silently_unavailable(self):
+        with mock.patch.object(pathlib.Path, "read_text", side_effect=FileNotFoundError):
+            self.assertFalse(self.rb.available())
+
+    def test_polling_202_then_200(self):
+        self._set_env()
+        responses = iter([
+            (202, '{"jobId": "j1"}'),
+            (200, '{"url":"u","title":"T","markdown":"# 正文","coverage":{"suspectIncomplete":false}}'),
+        ])
+        with mock.patch.object(self.rb._http, "request_json", return_value={"extensionOnline": True}):
+            with mock.patch.object(self.rb._http, "request_status_text", side_effect=lambda *a, **k: next(responses)):
+                with mock.patch.object(self.rb.time, "sleep"):
+                    out = self.rb.fetch_page("https://x.test/a", wait_sec=60)
+        self.assertEqual(out["markdown"], "# 正文")
+
+    def test_suspect_incomplete_is_failure(self):
+        self._set_env()
+        with mock.patch.object(self.rb._http, "request_json", return_value={"extensionOnline": True}):
+            with mock.patch.object(self.rb._http, "request_status_text",
+                                   return_value=(200, '{"markdown":"残缺","coverage":{"suspectIncomplete":true}}')):
+                self.assertIsNone(self.rb.fetch_page("https://x.test/a", wait_sec=60))
+
+    def test_401_fixed_message_no_password_leak(self):
+        self._set_env()
+        import io
+        stderr = io.StringIO()
+        with mock.patch.object(self.rb._http, "request_json", return_value={"extensionOnline": True}):
+            with mock.patch.object(self.rb._http, "request_status_text", return_value=(401, "Unauthorized")):
+                with mock.patch.object(sys, "stderr", stderr):
+                    self.assertIsNone(self.rb.fetch_page("https://x.test/a", wait_sec=60))
+        self.assertNotIn("TESTSECRET", stderr.getvalue())
+        self.assertIn("鉴权失败", stderr.getvalue())
+        self.assertFalse(self.rb.available())  # 401 后本进程升级层标记不可用
+
+    def test_offline_health_unavailable(self):
+        self._set_env()
+        with mock.patch.object(self.rb._http, "request_json", return_value={"extensionOnline": False}):
+            self.assertFalse(self.rb.available())
 
 
 class TestBatchFetch(unittest.TestCase):

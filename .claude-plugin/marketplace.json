@@ -9,7 +9,7 @@
       "name": "search-crew",
       "source": "./",
       "description": "分层调研系统：fast-search 通用快速、site-search 官方精确、deep-search 深度循环。底层 Jina/Serper/Bocha(中文) + grok/gemini/doubao AI 综述 + 站点 API + Chrome DevTools MCP。",
-      "version": "1.0.4"
+      "version": "1.1.0"
     }
   ]
 }

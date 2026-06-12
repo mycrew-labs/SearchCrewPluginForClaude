@@ -145,9 +145,7 @@ def search(query: str, max_results: int = 10, **_: Any) -> list[dict[str, Any]]:
 
 判定逻辑在 `skills/search-toolkit/scripts/fetch.py`：`_is_raw_content_type`（Content-Type + HTML 标签兜底）、`_looks_blocked`（反爬签名）。要加新源类型 / 解析器在此扩展。
 
-**已知不支持**：微信公众号（`mp.weixin.qq.com`，风控 + 滑块，合规手段过不去）。
-
-**未来方向（[backlog B-006](./openspec/project.md)）**：接入 [OpenCLI](https://github.com/jackwener/OpenCLI) 的 `opencli-browser` 作进阶后端（处理 JS 重 / 非验证码登录墙），agent 内部用、不暴露给用户；需先有远程化调用版本（不依赖本地常驻 Chrome）。
+**升级抓取层**：`--real-browser` 开启时，域名直达清单（飞书 / Notion / 语雀 / 微信公众号等，`limits.yaml` `web_page_fetch.real_browser.direct_domains`）与被挡场景会升级到 [universal-page-fetcher](https://github.com/mycrew-labs/universal-page-fetcher)（真实已登录浏览器执行端）。客户端实现在 `lib/real_browser.py`（轮询契约、coverage 残缺判失败）；连接配置按对方自有约定读取，本插件不存。微信公众号等强风控站点经此层可抓。
 
 ## 未来候选 backend / 适配器（B-005 之后）
 
