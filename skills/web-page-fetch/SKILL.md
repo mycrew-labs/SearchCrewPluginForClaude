@@ -1,6 +1,6 @@
 ---
 name: web-page-fetch
-description: 读取 / 总结 / 抽取一个具体 URL 的网页或文件内容时使用。优先用本 skill（走 fetch.py：Jina Reader 渲染 HTML + raw 文件原文直取 + 反爬识别 + 必要时升级真实浏览器抓取 + usage 打点）而非内置 WebFetch；仅在它返回 WEBFETCH_FALLBACK 时才回落内置 WebFetch。需登录态页面、飞书 / Notion / 语雀虚拟滚动长文档、微信公众号文章也走本 skill（自动升级抓取）。不要因普通搜索 / 跨站调研触发（那是 evidence-search / site-search / deep-search 的活）。
+description: 拿到具体 URL 要读取 / 总结 / 抽取其网页或文件内容时，MUST 用本 skill，不要直接用内置 WebFetch。覆盖普通网页、raw 文件（GitHub raw 的 README/.md/.json/源码）、需登录态页面，以及微信公众号 / 飞书 / Lark / Notion / 语雀这类反爬或虚拟滚动长文档（自动升级真实浏览器抓取）。仅当本 skill 返回 WEBFETCH_FALLBACK 时才回落内置 WebFetch。不要用于没有具体 URL 的普通搜索 / 跨站调研（那是 evidence-search / site-search / deep-search）。
 ---
 
 # web-page-fetch
@@ -28,7 +28,7 @@ python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/fetch.py --real-browse
 
 主对话入口固定带 `--real-browser`，并给 Bash 工具设 timeout 600000ms——升级抓取走真实浏览器滚动遍历，慢页可达分钟级。`fetch.py` 自动判 HTML（Jina Reader 渲染）/ raw（原文直取），识别反爬墙，并在两类「必要」场景升级到 universal-page-fetcher：
 
-1. **域名直达**：host 命中 `limits.yaml` `web_page_fetch.real_browser.direct_domains` → 跳过普通链直接走真实浏览器。默认清单及收录理由：
+1. **域名直达**：host 命中 site-fetch 清单（`site-fetch.txt` 中 capability=real-browser 的条目，与「读 URL 拦截 hook」共用，见 `scripts/lib/fetch_routing.py`）→ 跳过普通链直接走真实浏览器。默认清单及收录理由：
    - `feishu.cn` / `larksuite.com` / `notion.so` / `notion.site` / `yuque.com`：**虚拟滚动长文档**——正文随滚动按需渲染，Jina 等服务端抓取只能拿到首屏附近的内容，且返回的是「成功但残缺」，程序无法从失败信号探测到；真实浏览器执行端会自动滚动遍历到底再抽取。
    - `mp.weixin.qq.com`：**风控 + 滑块验证码墙**——服务端无头抓取必撞验证页；真实浏览器带设备原生指纹与登录态，可正常取文。
 2. **被挡升级**：撞上验证码墙 / 登录付费墙 / 抓取链失败 → 先试真实浏览器，仍失败才按 blocked 输出。
@@ -59,4 +59,11 @@ python3 $CLAUDE_PLUGIN_ROOT/skills/search-toolkit/scripts/fetch.py --real-browse
 
 ## 与内置 WebFetch 的关系
 
-本 skill 是**优先选择**，不是物理禁用 WebFetch（Claude Code 无法拦截内置工具）。只在 `fetch.py` 给 `WEBFETCH_FALLBACK` 时回落内置 WebFetch。相比内置 WebFetch，本路径：Jina Reader 能渲染 JS、产出更干净 markdown、raw 文件原文保真、有反爬识别、能升级真实浏览器拿登录态与虚拟滚动长文档、走 usage 打点。
+读 URL 优先本 skill 由**两层**保障：
+
+1. **description 触发层**（软）：本 skill 描述引导主 agent 优先走 fetch.py——但它打不过内置 WebFetch 的注意力优势，可能漏触发。
+2. **PreToolUse hook 动作点兜底**（`hooks/webfetch_gate.py`，随 plugin 分发）：主 agent 真去调内置 WebFetch 时拦截——site-fetch 清单命中的站点（微信等）**每次硬拦**并指明改用 `fetch.py --real-browser`；其余站点**本 session 首次软拦、retry 放行**（给 `WEBFETCH_FALLBACK` 回落留路）。
+
+只在 `fetch.py` 给 `WEBFETCH_FALLBACK`（无 key / 网络失败）时才回落内置 WebFetch。相比内置 WebFetch，本路径：Jina Reader 渲染 JS、产出更干净 markdown、raw 文件原文保真、有反爬识别、能升级真实浏览器拿登录态与虚拟滚动长文档、走 usage 打点。
+
+> 历史订正：早期文档曾称「Claude Code 无法拦截内置工具、只能软引导」——这已不成立。PreToolUse hook 可拦截内置 WebFetch，故有上面第 2 层。

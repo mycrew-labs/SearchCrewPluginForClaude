@@ -1,0 +1,16 @@
+# search-crew 站点 → 抓取能力清单。一行一条：<域名>|<能力>
+#
+# 匹配：请求 host 等于 <域名>，或以 .<域名> 结尾（如 x.feishu.cn 命中 feishu.cn）。
+# 能力（capability）当前实装值只有 real-browser：命中即走真实浏览器升级层、跳过普通链——
+# 这些站点普通抓取「成功但残缺」或撞强风控验证墙，内置 WebFetch 也抓不到。
+# jina / raw 由 fetch.py 按 Content-Type 自动判定，无需在此登记。
+#
+# fetch.py 与「读 URL 拦截 hook」共用本清单（单一事实源，见 scripts/lib/fetch_routing.py）。
+# 运维：grep 查站点 / wc -l 数条目 / sort -u 去重，均可直接用。
+# 你可自由增删；AI 想新增会先写到 pending/，由你 promote 合并，不直接改本文件。
+mp.weixin.qq.com|real-browser
+feishu.cn|real-browser
+larksuite.com|real-browser
+notion.so|real-browser
+notion.site|real-browser
+yuque.com|real-browser

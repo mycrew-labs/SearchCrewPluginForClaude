@@ -57,13 +57,6 @@ web_page_fetch:
   # （需登录态 / 虚拟滚动 / 被挡才升级；批量抓取只对确有需要的 URL 开——执行端并发
   # 上限 10、单任务分钟级，整批盲目开启会打爆）。
   real_browser:
-    # 域名直达清单：已知普通链「成功但残缺」的站点（虚拟滚动长文档 / 强风控），
-    # 直接走真实浏览器，不浪费一次直连 + Jina。匹配：host 等于条目或以 `.<条目>` 结尾。
-    direct_domains:
-      - feishu.cn
-      - larksuite.com
-      - notion.so
-      - notion.site
-      - yuque.com
-      - mp.weixin.qq.com
+    # 站点 → 抓取能力清单不在这里，见同目录 site-fetch.txt（行式 `<域名>|<能力>`，
+    # grep / wc 友好；fetch.py 与「读 URL 拦截 hook」共用，见 scripts/lib/fetch_routing.py）。
     wait_sec: 480   # 单次升级抓取的轮询总预算（秒）；执行端单任务上限 15 分钟，CLI 不等满

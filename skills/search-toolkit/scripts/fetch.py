@@ -36,9 +36,8 @@ from __future__ import annotations
 
 import argparse
 import sys
-import urllib.parse
 
-from lib import BackendError, emit, jina, config, real_browser
+from lib import BackendError, emit, jina, config, real_browser, fetch_routing
 from lib import _http
 
 # 反爬 / 验证码页强信号短语（大小写不敏感）
@@ -63,12 +62,7 @@ _RAW_CTYPES = {
 _HTML_CTYPES = {"text/html", "application/xhtml+xml"}
 _HTML_TAG_MARKERS = ("<!doctype html", "<html", "<head", "<body")
 
-# 域名直达清单的内置默认（limits.yaml real_browser.direct_domains 可覆盖）：
-# 只收录有实测证据「普通链成功但残缺、程序探测不到」的站点
-_DEFAULT_DIRECT_DOMAINS = (
-    "feishu.cn", "larksuite.com", "notion.so", "notion.site",
-    "yuque.com", "mp.weixin.qq.com",
-)
+# 域名直达的「站点 → 抓取能力」mapping 收敛到 lib/fetch_routing（fetch.py 与拦截 hook 共用）。
 _DEFAULT_RB_WAIT_SEC = 480
 _RB_WARNING = "real_browser_unavailable_content_may_be_incomplete"
 
@@ -91,25 +85,27 @@ def _on_blocked_policy() -> str:
         return "honest"
 
 
-def _real_browser_cfg() -> tuple[tuple[str, ...], int]:
-    """读 limits.yaml web_page_fetch.real_browser 段，缺失回落内置默认。"""
+def _rb_wait_sec() -> int:
+    """读 limits.yaml web_page_fetch.real_browser.wait_sec，缺失回落内置默认。"""
     try:
         limits = config.load_limits() or {}
         rb = ((limits.get("web_page_fetch") or {}).get("real_browser")) or {}
-        domains = tuple(rb.get("direct_domains") or _DEFAULT_DIRECT_DOMAINS)
-        wait_sec = int(rb.get("wait_sec", _DEFAULT_RB_WAIT_SEC))
-        return domains, max(30, wait_sec)
+        return max(30, int(rb.get("wait_sec", _DEFAULT_RB_WAIT_SEC)))
     except Exception:
-        return _DEFAULT_DIRECT_DOMAINS, _DEFAULT_RB_WAIT_SEC
+        return _DEFAULT_RB_WAIT_SEC
 
 
 def _matches_direct_domain(url: str) -> bool:
-    """host 等于清单条目或以 `.<条目>` 结尾 → 命中直达。"""
-    host = (urllib.parse.urlsplit(url).hostname or "").lower()
-    if not host:
-        return False
-    domains, _ = _real_browser_cfg()
-    return any(host == d or host.endswith(f".{d}") for d in domains)
+    """host 命中 mapping 中 capability=real-browser 的条目 → 直达升级。
+
+    mapping（站点 → 抓取能力）由 lib/fetch_routing 从行式清单 site-fetch.txt 统一加载，
+    与拦截 hook 共用同一份事实源。
+    """
+    try:
+        mapping = fetch_routing.active_mapping()
+    except Exception:
+        mapping = None
+    return fetch_routing.capability_for_url(url, mapping) == fetch_routing.REAL_BROWSER
 
 
 def _is_raw_content_type(ctype: str, body: str) -> bool:
@@ -134,7 +130,7 @@ def _blocked_payload(url: str, reason: str) -> dict:
 
 def _try_real_browser(url: str) -> dict | None:
     """经 universal-page-fetcher 升级抓取；任何失败返回 None（回落交给调用方）。"""
-    _, wait_sec = _real_browser_cfg()
+    wait_sec = _rb_wait_sec()
     data = real_browser.fetch_page(url, wait_sec)
     if data is None:
         return None
