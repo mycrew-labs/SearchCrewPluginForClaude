@@ -5,9 +5,9 @@
 ### 0. AI 综述 backend（grok / gemini / doubao）
 
 `borrow-smart-search-web-reader` change 引入。backend 用品牌命名；API key 走 env（secret），
-model 走 routing.yaml（按 fast/deep 分层，不在代码 hardcode）。
+model 和后端特定选项走 routing.yaml（按 fast/deep 分层，不在代码 hardcode）。
 
-| backend | 偏好场景 | API | env API key | model 配在哪 |
+| backend | 偏好场景 | API | env API key | 模型配置在哪 |
 |---|---|---|---|---|
 | `grok` | 英文舆论 / 实时讨论 / X | xAI Agent Tools API（`/v1/responses` + web_search） | `GROK_API_KEY` | `ai_summary.models.grok.{fast,deep}` |
 | `doubao` | 中文语境 / 字节生态 / 中文热点（火山方舟，托管 Doubao / DeepSeek / Kimi 等） | 火山方舟 Responses API（`/api/v3/responses` + web_search） | `DOUBAO_API_KEY` | `ai_summary.models.doubao.{fast,deep}` |
@@ -17,15 +17,15 @@ model 走 routing.yaml（按 fast/deep 分层，不在代码 hardcode）。
 >
 > **grok 的坑**：旧 Live Search（`search_parameters`）已于 2026-01-12 废弃（HTTP 410），现走 Agent Tools API（`/v1/responses`）。三家都走各自的 Responses/Grounding API，不是普通 chat completions。
 
-**model 分层**：`ai_summary.models.<backend>` 下分 `fast` / `deep` 两档。`/search-fast`（ai_search 快答）用 fast 档（便宜、量大），deep-search 用 deep 档（强、保质量）。tier 按调用方推断（subagent 名含 `fast` 或 ai_search → fast，其余 → deep），也可用 `search.py --tier fast|deep` / `--model <id>` 覆盖。
+**model 分层**：`ai_summary.models.<backend>` 下分 `fast` / `deep` 两档。旧格式可直接写 model id；需要后端特定选项时用对象格式，例如 `model` + `reasoning_effort`。`/search-fast`（ai_search 快答）用 fast 档（便宜、量大），deep-search 用 deep 档（强、保质量）。tier 按调用方推断（subagent 名含 `fast` 或 ai_search → fast，其余 → deep），也可用 `search.py --tier fast|deep` / `--model <id>` 覆盖模型名。
 
-> **为什么 model 进配置而不写在代码里**：各厂商 model 版本号更新很快（带日期后缀），写死在代码里每次都要改源码。放 `routing.yaml` 后，换 model 只改一行配置、不动代码；fast/deep 分层也只是配置表的两行。
+> **为什么 model 进配置而不写在代码里**：各厂商 model 版本号更新很快（带日期后缀），推理强度等请求选项也会随模型迁移变化。放 `routing.yaml` 后，换 model 或调整档位选项只改配置、不动代码。
 
 `defaults/routing.yaml` 当前各档默认值（可按需改）：
 
 | backend | fast 档（省钱 / 量大） | deep 档（保质量） |
 |---|---|---|
-| grok | `grok-4-fast` | `grok-4.3` |
+| grok | `grok-4.3` + `reasoning_effort: low` | `grok-4.5` + `reasoning_effort: medium` |
 | doubao | `doubao-seed-2-0-mini-260428` | `doubao-seed-2-0-pro-260215` |
 | gemini | `gemini-2.5-flash-lite` | `gemini-3.5-flash` |
 

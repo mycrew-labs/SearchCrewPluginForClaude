@@ -81,10 +81,14 @@ class TestAIBackends(unittest.TestCase):
         fake_resp = self._responses_api_body(
             "grok 综述正文", ["https://example.com/a", "https://example.com/b"]
         )
-        with mock.patch("urllib.request.urlopen", return_value=_make_response(fake_resp)):
-            envelope = ai_grok.search("hello", model="grok-4.3")
+        with mock.patch("urllib.request.urlopen", return_value=_make_response(fake_resp)) as urlopen:
+            envelope = ai_grok.search("hello", model="grok-4.3", reasoning_effort="low")
         self.assertEqual(envelope["backend"], "grok")
         self.assertEqual(envelope["summary"], "grok 综述正文")
+        req = urlopen.call_args.args[0]
+        body = json.loads(req.data.decode("utf-8"))
+        self.assertEqual(body["model"], "grok-4.3")
+        self.assertEqual(body["reasoning"], {"effort": "low"})
         urls = {c["url"] for c in envelope["citations"]}
         self.assertEqual(urls, {"https://example.com/a", "https://example.com/b"})
         # results 字段与 jina/serper 同 schema

@@ -11,7 +11,7 @@
 请求用 `input` 数组，响应在 output[] 的 message 项里（content[].text + annotations[]）。
 
 model 不在代码 hardcode：由调用方（search.py）从 routing.yaml ai_summary.models.grok
-按 subagent 分层（fast/deep）解析后传入。
+按 subagent 分层（fast/deep）解析后传入；reasoning_effort 也由同一配置透传。
 """
 
 from __future__ import annotations
@@ -31,7 +31,13 @@ def is_available() -> bool:
     return env(API_KEY_ENV) is not None
 
 
-def search(query: str, *, max_results: int = 10, model: str | None = None) -> dict[str, Any]:
+def search(
+    query: str,
+    *,
+    max_results: int = 10,
+    model: str | None = None,
+    reasoning_effort: str | None = None,
+) -> dict[str, Any]:
     api_key = env(API_KEY_ENV)
     if not api_key:
         raise BackendError(BACKEND, f"缺少 {API_KEY_ENV}")
@@ -43,6 +49,8 @@ def search(query: str, *, max_results: int = 10, model: str | None = None) -> di
         "input": [{"role": "user", "content": query}],
         "tools": [{"type": "web_search"}, {"type": "x_search"}],
     }
+    if reasoning_effort:
+        body["reasoning"] = {"effort": reasoning_effort}
     headers = {"Authorization": f"Bearer {api_key}"}
 
     data = _http.request_json(

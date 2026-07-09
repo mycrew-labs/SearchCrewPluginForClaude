@@ -25,7 +25,7 @@ query 未命中下方任一硬规则时，subagent **优先**调用一个 AI 综
   - `grok`：英文舆论 / 实时讨论 / Twitter/X 语境 / 热点追踪（需 `GROK_API_KEY`）
   - `doubao`：火山方舟（托管 Doubao / DeepSeek / Kimi 等），中文语境 / 字节生态 / 中文热点（需 `DOUBAO_API_KEY`）
   - `gemini`：全球网页 / 英文综述 / 通用信息检索（需 `GEMINI_API_KEY`）
-  - model 用哪个由 `~/.config/search-crew/routing.yaml` 的 `ai_summary.models.<backend>.{fast,deep}` 决定，不在 env 配
+  - model 与后端特定选项由 `~/.config/search-crew/routing.yaml` 的 `ai_summary.models.<backend>.{fast,deep}` 决定，不在 env 配
 - **全部 key 缺失**：自动回落到 `ai_summary.fallback_on_no_key`（默认 `jina`），与现有 `WEBSEARCH_FALLBACK` 机制一致
 - **关闭整层**：用户态 `routing.yaml` 改 `ai_summary.enabled: false`
 - **与硬规则的关系**：硬规则永远优先；AI 综述层只在「query 未命中任一硬规则」时启用

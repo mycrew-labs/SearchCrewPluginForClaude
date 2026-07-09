@@ -11,8 +11,8 @@ CLI:
   （summary 仅在 backend 是 AI 综述时出现；citations 走 results 派生）
 - 无可用 backend → { "results": [], "fallback": "WEBSEARCH_FALLBACK" }
 
-AI 综述 backend 的 model 不在代码 hardcode：从 routing.yaml ai_summary.models.<backend>
-按 tier（subagent 名含 fast 或 ai_search → fast 档；其余 → deep）解析；可用 --model 显式覆盖。
+AI 综述 backend 的模型配置不在代码 hardcode：从 routing.yaml ai_summary.models.<backend>
+按 tier（subagent 名含 fast 或 ai_search → fast 档；其余 → deep）解析；可用 --model 显式覆盖模型名。
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from lib import ai_summary
 _ai_summary_cfg = ai_summary.ai_summary_cfg
 _pick_ai_backend = ai_summary.pick_backend
 _resolve_tier = ai_summary.resolve_tier
-_resolve_model = ai_summary.resolve_model
+_resolve_model_config = ai_summary.resolve_model_config
 _run_ai = ai_summary.run_ai
 
 
@@ -59,8 +59,8 @@ def main() -> int:
         if picked:
             try:
                 tier = _resolve_tier(args.tier)
-                model = _resolve_model(picked, tier, args.model)
-                emit(_run_ai(picked, args.query, args.max_results, model))
+                model_config = _resolve_model_config(picked, tier, args.model)
+                emit(_run_ai(picked, args.query, args.max_results, model_config))
                 return 0
             except BackendError as e:
                 print(f"[search] AI backend {picked} 失败：{e}，回落非 AI 搜索", file=sys.stderr)

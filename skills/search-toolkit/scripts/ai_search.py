@@ -3,7 +3,7 @@
 
 一次 AI 综述调用拿"现成答案"——不派 subagent、不产结构化文件。AI 源按语言/语境选
 （中文→doubao、英文舆论→grok、全球综述→gemini；沿用 routing.yaml selection_order），
-fast 档 model。
+fast 档模型配置。
 
 CLI: python3 ai_search.py --query <q> [--max-results N] [--ai-backend ...] [--model ...]
 
@@ -107,9 +107,9 @@ def main() -> int:
               "calls": 0, "cost_line": None})
         return 0
 
-    model = ai_summary.resolve_model(picked, "fast", args.model)
+    model_config = ai_summary.resolve_model_config(picked, "fast", args.model)
     try:
-        out = ai_summary.run_ai(picked, args.query, args.max_results, model)
+        out = ai_summary.run_ai(picked, args.query, args.max_results, model_config)
     except BackendError as e:
         print(f"[ai_search] AI 源 {picked} 调用失败：{e}，回落普通搜索", file=sys.stderr)
         emit({"backend": None, "summary": None, "citations": [], "fallback": "WEBSEARCH_FALLBACK",

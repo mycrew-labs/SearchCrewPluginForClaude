@@ -29,7 +29,7 @@ class TestAiSearch(unittest.TestCase):
         fake_doubao = mock.Mock(); fake_doubao.is_available.return_value = True
         with mock.patch.dict(ai_search.ai_summary.AI_BACKEND_MODULES, {"doubao": fake_doubao}):
             with mock.patch.object(ai_search.ai_summary, "pick_backend", side_effect=lambda x: x) as pick:
-                with mock.patch.object(ai_search.ai_summary, "resolve_model", return_value="m"):
+                with mock.patch.object(ai_search.ai_summary, "resolve_model_config", return_value={"model": "m"}):
                     with mock.patch.object(ai_search.ai_summary, "run_ai", return_value={"backend": "doubao", "summary": "综述", "citations": [{"url": "u"}]}):
                         out = _run(["--query", "国产新能源车推荐"])
         pick.assert_called_with("doubao")  # 中文 → 显式传 doubao
@@ -40,7 +40,7 @@ class TestAiSearch(unittest.TestCase):
 
     def test_english_uses_default_order(self):
         with mock.patch.object(ai_search.ai_summary, "pick_backend", return_value="grok") as pick:
-            with mock.patch.object(ai_search.ai_summary, "resolve_model", return_value="m"):
+            with mock.patch.object(ai_search.ai_summary, "resolve_model_config", return_value={"model": "m"}):
                 with mock.patch.object(ai_search.ai_summary, "run_ai", return_value={"backend": "grok", "summary": "s", "citations": []}):
                     out = _run(["--query", "open source vector db"])
         pick.assert_called_with(None)  # 英文 → 不强制，交默认 selection_order

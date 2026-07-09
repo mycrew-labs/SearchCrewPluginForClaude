@@ -1,4 +1,4 @@
-"""AI 综述层共用逻辑：选源 / 解析 model / 调用。
+"""AI 综述层共用逻辑：选源 / 解析模型配置 / 调用。
 
 供 `search.py --prefer ai` 与 `ai_search.py`（/search-fast 快答）共用，避免重复。
 AI 源的 model 不在代码 hardcode：从 routing.yaml ai_summary.models.<backend> 按 tier 解析。
@@ -17,6 +17,7 @@ AI_BACKEND_MODULES = {
     "doubao": ai_doubao,
 }
 _DEFAULT_SELECTION_ORDER = ["grok", "doubao", "gemini"]
+ModelConfig = dict[str, Any]
 
 
 def ai_summary_cfg() -> dict:
@@ -49,17 +50,46 @@ def resolve_tier(explicit: str | None) -> str:
     return "fast" if "fast" in sub else "deep"
 
 
-def resolve_model(backend_name: str, tier: str, explicit_model: str | None) -> str | None:
-    """model 来源：显式 > routing.yaml ai_summary.models.<backend>.<tier> > 同 backend 另一档。"""
-    if explicit_model:
-        return explicit_model
+def _normalize_model_config(raw: Any) -> ModelConfig:
+    """兼容旧字符串格式与新对象格式。"""
+    if isinstance(raw, dict):
+        return {str(k): v for k, v in raw.items() if v is not None}
+    if raw:
+        return {"model": raw}
+    return {}
+
+
+def resolve_model_config(backend_name: str, tier: str, explicit_model: str | None) -> ModelConfig:
+    """模型配置来源：routing.yaml 档位配置；显式 --model 只覆盖其中的 model。"""
     models = (ai_summary_cfg().get("models") or {}).get(backend_name) or {}
-    return models.get(tier) or models.get("deep") or models.get("fast")
+    cfg: ModelConfig = {}
+    for key in (tier, "deep", "fast"):
+        cfg = _normalize_model_config(models.get(key))
+        if cfg:
+            break
+    if explicit_model:
+        cfg["model"] = explicit_model
+    return cfg
 
 
-def run_ai(backend_name: str, query: str, max_results: int, model: str | None) -> dict[str, Any]:
+def resolve_model(backend_name: str, tier: str, explicit_model: str | None) -> str | None:
+    """兼容旧调用方：只返回 model 字符串。"""
+    return resolve_model_config(backend_name, tier, explicit_model).get("model")
+
+
+def run_ai(backend_name: str, query: str, max_results: int, model_config: str | ModelConfig | None) -> dict[str, Any]:
     mod = AI_BACKEND_MODULES[backend_name]
-    envelope = mod.search(query, max_results=max_results, model=model)
+    cfg = _normalize_model_config(model_config)
+    model = cfg.get("model")
+    if backend_name == "grok":
+        envelope = mod.search(
+            query,
+            max_results=max_results,
+            model=model,
+            reasoning_effort=cfg.get("reasoning_effort"),
+        )
+    else:
+        envelope = mod.search(query, max_results=max_results, model=model)
     return {
         "backend": envelope["backend"],
         "summary": envelope.get("summary", ""),

@@ -21,10 +21,10 @@ last_updated: "2026-05-22"
 # - enabled=false → 完全关闭本层，回到原有 jina / serper 路径
 # - 硬规则 topics（hard_rule: true）优先级始终高于 AI 综述层
 #
-# models：每个 backend 按 subagent 分层选 model（不在代码 hardcode，全在这里）。
+# models：每个 backend 按 subagent 分层选模型配置（不在代码 hardcode，全在这里）。
 # - /search-fast(ai_search) 用 fast 档（便宜、量大）；deep-search 用 deep 档（强、保质量）
-# - model 填各厂商的【API model ID】：
-#   - grok（xAI）：grok-4-fast / grok-4.3 等，见 https://console.x.ai
+# - 旧格式 `fast: <model-id>` 仍兼容；需要后端选项时用对象格式 `{model, ...}`：
+#   - grok（xAI）：fast 推荐 grok-4.3 + reasoning_effort: low；deep 默认 grok-4.5 + medium
 #   - doubao（火山方舟）：带日期的小写 ID，如 doubao-seed-2-0-lite-260428；
 #     列已开通 model：curl -s https://ark.cn-beijing.volces.com/api/v3/models -H "Authorization: Bearer $DOUBAO_API_KEY"
 #   - gemini（Google）：gemini-2.5-flash-lite / gemini-3.5-flash 等
@@ -40,8 +40,12 @@ ai_summary:
   fallback_on_no_key: jina
   models:
     grok:
-      fast: grok-4-fast
-      deep: grok-4.3
+      fast:
+        model: grok-4.3
+        reasoning_effort: low
+      deep:
+        model: grok-4.5
+        reasoning_effort: medium
     doubao:
       fast: doubao-seed-2-0-mini-260428
       deep: doubao-seed-2-0-pro-260215
