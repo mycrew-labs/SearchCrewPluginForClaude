@@ -8,16 +8,15 @@ set -u
 [ -d "openspec/changes" ] || exit 0
 command -v openspec >/dev/null 2>&1 || exit 0
 
+# 以 tasks.md 勾选进度判定「实施完成」：completedTasks == totalTasks 且 totalTasks > 0。
+# openspec 1.14 的 `status --json` 中 isComplete 只表示规划文档齐全，不能用来判断实施是否完成。
 names="$(openspec list --json 2>/dev/null \
-  | python3 -c 'import json,sys; [print(c["name"]) for c in json.load(sys.stdin).get("changes",[])]' 2>/dev/null)"
+  | python3 -c 'import json,sys; [print(c["name"]) for c in json.load(sys.stdin).get("changes",[]) if c.get("totalTasks",0) > 0 and c.get("completedTasks") == c.get("totalTasks")]' 2>/dev/null)"
 
 problems=""
 while IFS= read -r name; do
   [ -n "$name" ] || continue
-  status="$(openspec status --change "$name" --json 2>/dev/null)"
-  if echo "$status" | grep -q '"isComplete":[[:space:]]*true'; then
-    problems="${problems}  - ${name}"$'\n'
-  fi
+  problems="${problems}  - ${name}"$'\n'
 done <<< "$names"
 
 if [ -n "$problems" ]; then
